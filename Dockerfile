@@ -4,7 +4,9 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get upgrade -y && apt-get install \
 	git curl numactl wget libmpich-dev python3-dev \
-	openmpi-bin openmpi-common openmpi-doc libopenmpi-dev -y 
+	openmpi-bin openmpi-common openmpi-doc libopenmpi-dev \
+	ffmpeg libsm6 libxext6 -y
+
 ENV MPICC=/opt/ompi/bin/mpicc
 ENV MPICXX=/opt/ompi/bin/mpicxx
 RUN CC=${MPICC} pip install mpi4py==3.1.5
