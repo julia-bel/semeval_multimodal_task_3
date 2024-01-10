@@ -24,7 +24,7 @@ import decord
 
 decord.bridge.set_bridge("torch")
 
-# %%
+
 # imports modules for registration
 from video_llama.datasets.builders import *
 from video_llama.models import *
@@ -33,7 +33,6 @@ from video_llama.runners import *
 from video_llama.tasks import *
 
 
-# %%
 def parse_args():
     parser = argparse.ArgumentParser(description="Demo")
     parser.add_argument(
@@ -336,7 +335,6 @@ with gr.Blocks() as demo:
         queue=False,
     )
 
-demo.queue().launch(share=False, )
-
-
-# %%
+demo.queue().launch(
+    share=False,
+)
