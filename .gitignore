@@ -162,3 +162,4 @@ SemEval-2024_Task3
 hf_token
 *.tar
 temp
+cache_dir
