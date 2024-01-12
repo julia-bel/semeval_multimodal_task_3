@@ -5,7 +5,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get upgrade -y && apt-get install \
 	git curl numactl wget libmpich-dev python3-dev \
 	openmpi-bin openmpi-common openmpi-doc libopenmpi-dev \
-	ffmpeg libsm6 libxext6 -y
+	ffmpeg libsm6 libxext6 tree -y
 
 ENV MPICC=/opt/ompi/bin/mpicc
 ENV MPICXX=/opt/ompi/bin/mpicxx
@@ -31,6 +31,6 @@ RUN groupadd --gid $USER_GID $USERNAME \
 
 # [Optional] Set the default user. Omit if you want to keep the default as root.
 USER $USERNAME
-RUN  echo -e "\nexport PATH=$PATH:/home/user-name-goes-here/.local/bin\n" >>  /home/user-name-goes-here/.bashrc && sudo chown -R $USERNAME /opt/conda
+RUN  echo -e "\nexport PATH=$PATH:/home/$USERNAME/.local/bin\n" >>  /home/$USERNAME/.bashrc && sudo chown -R $USERNAME /opt/conda
 
 WORKDIR /code
