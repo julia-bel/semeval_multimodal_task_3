@@ -50,14 +50,14 @@ from train import train_one_epoch
 from model.build_model import create_vat_model
 
 LATEST_CHECKPOINT_NAME = "epoch_latest.pt"
-MODEL_DICT = {"ViT-L-14": "laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K",
-              "ViT-H-14": "laion/CLIP-ViT-H-14-laion2B-s32B-b79K"}
-CHECKPOINT_DICT = {"ViT-L-14": "models--laion--CLIP-ViT-L-14-DataComp.XL-s13B-b90K/snapshots/84c9828e63dc9a9351d1fe637c346d4c1c4db341/pytorch_model.bin",
-                   "ViT-H-14": "models--laion--CLIP-ViT-H-14-laion2B-s32B-b79K/snapshots/94a64189c3535c1cb44acfcccd7b0908c1c8eb23/pytorch_model.bin"}
-
-
-
-
+MODEL_DICT = {
+    "ViT-L-14": "laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K",
+    "ViT-H-14": "laion/CLIP-ViT-H-14-laion2B-s32B-b79K",
+}
+CHECKPOINT_DICT = {
+    "ViT-L-14": "models--laion--CLIP-ViT-L-14-DataComp.XL-s13B-b90K/snapshots/84c9828e63dc9a9351d1fe637c346d4c1c4db341/pytorch_model.bin",
+    "ViT-H-14": "models--laion--CLIP-ViT-H-14-laion2B-s32B-b79K/snapshots/94a64189c3535c1cb44acfcccd7b0908c1c8eb23/pytorch_model.bin",
+}
 
 
 def random_seed(seed=42, rank=0):
@@ -68,26 +68,35 @@ def random_seed(seed=42, rank=0):
 
 def natural_key(string_):
     """See http://www.codinghorror.com/blog/archives/001018.html"""
-    return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_.lower())]
+    return [int(s) if s.isdigit() else s for s in re.split(r"(\d+)", string_.lower())]
 
 
 def get_latest_checkpoint(path: str, remote: bool):
     # as writen, this glob recurses, so can pick up checkpoints across multiple sub-folders
     if remote:
-        result = subprocess.run(["aws", "s3", "ls", path + "/"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.run(
+            ["aws", "s3", "ls", path + "/"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
         print(result)
         if result.returncode == 1:
             return None
-        checkpoints = [os.path.join(path, x.split(' ')[-1]) for x in result.stdout.decode().split('\n')[:-1]]
+        checkpoints = [
+            os.path.join(path, x.split(" ")[-1])
+            for x in result.stdout.decode().split("\n")[:-1]
+        ]
     else:
-        checkpoints = glob.glob(path + '**/*.pt', recursive=True)
+        checkpoints = glob.glob(path + "**/*.pt", recursive=True)
     if checkpoints:
         checkpoints = sorted(checkpoints, key=natural_key)
         return checkpoints[-1]
     return None
 
+
 def SET_GLOBAL_VALUE(k, v):
     set_global_value(k, v)
+
 
 def main(args):
     args = parse_args(args)
@@ -109,38 +118,40 @@ def main(args):
     # get the name of the experiments
     if args.name is None:
         # sanitize model name for filesystem / uri use, easier if we don't use / in name as a rule?
-        model_name_safe = args.model.replace('/', '-')
+        model_name_safe = args.model.replace("/", "-")
         date_str = datetime.now().strftime("%Y_%m_%d-%H_%M_%S")
         if args.distributed:
             # sync date_str from master to all ranks
             date_str = broadcast_object(args, date_str)
-        args.name = '-'.join([
-            date_str,
-            f"pt_{args.clip_type}",
-            f"text_{args.text_type}",
-            f"bs_{args.batch_size}",
-            f"ep_{args.epochs}",
-            f"mask_{args.force_patch_dropout}",
-            f"lorar_{args.lora_r}" if args.convert_to_lora else "",
-            f"lr_{args.lr}",
-            f"coeflr_{args.coef_lr}",
-            f"warm_{args.warmup}",
-            f"accum_{args.accum_freq}",
-            f"tattn_{args.add_time_attn}" if args.clip_type == 'vl' else "",
-            f"model_{model_name_safe}",
-            f"frm_{args.num_frames}",
-            f"vdb_{args.video_decode_backend}",
-        ])
+        args.name = "-".join(
+            [
+                date_str,
+                f"pt_{args.clip_type}",
+                f"text_{args.text_type}",
+                f"bs_{args.batch_size}",
+                f"ep_{args.epochs}",
+                f"mask_{args.force_patch_dropout}",
+                f"lorar_{args.lora_r}" if args.convert_to_lora else "",
+                f"lr_{args.lr}",
+                f"coeflr_{args.coef_lr}",
+                f"warm_{args.warmup}",
+                f"accum_{args.accum_freq}",
+                f"tattn_{args.add_time_attn}" if args.clip_type == "vl" else "",
+                f"model_{model_name_safe}",
+                f"frm_{args.num_frames}",
+                f"vdb_{args.video_decode_backend}",
+            ]
+        )
     args.pretrained = CHECKPOINT_DICT[args.model]
     args.model = MODEL_DICT[args.model]
 
-    resume_latest = args.resume == 'latest'
+    resume_latest = args.resume == "latest"
     log_base_path = os.path.join(args.logs, args.name)
     args.log_base_path = log_base_path
     args.log_path = None
     if is_master(args, local=args.log_local):
         os.makedirs(log_base_path, exist_ok=True)
-        log_filename = f'out-{args.rank}' if args.log_local else 'out.log'
+        log_filename = f"out-{args.rank}" if args.log_local else "out.log"
         args.log_path = os.path.join(log_base_path, log_filename)
         if os.path.exists(args.log_path) and not resume_latest:
             print(
@@ -153,16 +164,18 @@ def main(args):
     setup_logging(args.log_path, args.log_level)
 
     # Setup wandb, tensorboard, checkpoint logging
-    args.wandb = 'wandb' in args.report_to or 'all' in args.report_to
-    args.tensorboard = 'tensorboard' in args.report_to or 'all' in args.report_to
+    args.wandb = "wandb" in args.report_to or "all" in args.report_to
+    args.tensorboard = "tensorboard" in args.report_to or "all" in args.report_to
     args.checkpoint_path = os.path.join(log_base_path, "checkpoints")
     if is_master(args):
-        args.tensorboard_path = os.path.join(log_base_path, "tensorboard") if args.tensorboard else ''
+        args.tensorboard_path = (
+            os.path.join(log_base_path, "tensorboard") if args.tensorboard else ""
+        )
         for dirname in [args.tensorboard_path, args.checkpoint_path]:
             if dirname:
                 os.makedirs(dirname, exist_ok=True)
     else:
-        args.tensorboard_path = ''
+        args.tensorboard_path = ""
 
     if resume_latest:
         resume_from = None
@@ -171,10 +184,12 @@ def main(args):
         if args.remote_sync is not None:
             checkpoint_path = os.path.join(args.remote_sync, args.name, "checkpoints")
             if args.save_most_recent:
-                print('Error. Cannot use save-most-recent with remote_sync and resume latest.')
+                print(
+                    "Error. Cannot use save-most-recent with remote_sync and resume latest."
+                )
                 return -1
-            if args.remote_sync_protocol != 's3':
-                print('Error. Sync protocol not supported when using resume latest.')
+            if args.remote_sync_protocol != "s3":
+                print("Error. Sync protocol not supported when using resume latest.")
                 return -1
         if is_master(args):
             # Checking for existing checkpoint via master rank only. It is possible for
@@ -188,11 +203,13 @@ def main(args):
                     resume_from = None
             else:
                 # otherwise, list checkpoint dir contents and pick the newest checkpoint
-                resume_from = get_latest_checkpoint(checkpoint_path, remote=args.remote_sync is not None)
+                resume_from = get_latest_checkpoint(
+                    checkpoint_path, remote=args.remote_sync is not None
+                )
             if resume_from:
-                logging.info(f'Found latest resume checkpoint at {resume_from}.')
+                logging.info(f"Found latest resume checkpoint at {resume_from}.")
             else:
-                logging.info(f'No latest resume checkpoint found in {checkpoint_path}.')
+                logging.info(f"No latest resume checkpoint found in {checkpoint_path}.")
         if args.distributed:
             # sync found checkpoint path to all ranks
             resume_from = broadcast_object(args, resume_from)
@@ -208,47 +225,55 @@ def main(args):
         result = remote_sync(
             os.path.join(args.logs, args.name),
             os.path.join(args.remote_sync, args.name),
-            args.remote_sync_protocol
+            args.remote_sync_protocol,
         )
         if result:
-            logging.info('remote sync successful.')
+            logging.info("remote sync successful.")
         else:
-            logging.info('Error: remote sync failed. Exiting.')
+            logging.info("Error: remote sync failed. Exiting.")
             return -1
         # if all looks good, start a process to do this every args.remote_sync_frequency seconds
         remote_sync_process = start_sync_process(
             args.remote_sync_frequency,
             os.path.join(args.logs, args.name),
             os.path.join(args.remote_sync, args.name),
-            args.remote_sync_protocol
+            args.remote_sync_protocol,
         )
         remote_sync_process.start()
 
-    if args.precision == 'fp16':
+    if args.precision == "fp16":
         logging.warning(
-            'It is recommended to use AMP mixed-precision instead of FP16. '
-            'FP16 support needs further verification and tuning, especially for train.')
+            "It is recommended to use AMP mixed-precision instead of FP16. "
+            "FP16 support needs further verification and tuning, especially for train."
+        )
 
     if args.horovod:
         logging.info(
-            f'Running in horovod mode with multiple processes / nodes. Device: {args.device}.'
-            f'Process (global: {args.rank}, local {args.local_rank}), total {args.world_size}.')
+            f"Running in horovod mode with multiple processes / nodes. Device: {args.device}."
+            f"Process (global: {args.rank}, local {args.local_rank}), total {args.world_size}."
+        )
     elif args.distributed:
         logging.info(
-            f'Running in distributed mode with multiple processes. Device: {args.device}.'
-            f'Process (global: {args.rank}, local {args.local_rank}), total {args.world_size}.')
+            f"Running in distributed mode with multiple processes. Device: {args.device}."
+            f"Process (global: {args.rank}, local {args.local_rank}), total {args.world_size}."
+        )
     else:
-        logging.info(f'Running with a single process. Device {args.device}.')
+        logging.info(f"Running with a single process. Device {args.device}.")
 
     dist_model = None
-    args.distill = args.distill_model is not None and args.distill_pretrained is not None
+    args.distill = (
+        args.distill_model is not None and args.distill_pretrained is not None
+    )
     if args.distill:
         # FIXME: support distillation with grad accum.
         assert args.accum_freq == 1
         # FIXME: support distillation with coca.
-        assert 'coca' not in args.model.lower()
+        assert "coca" not in args.model.lower()
 
-    if isinstance(args.force_image_size, (tuple, list)) and len(args.force_image_size) == 1:
+    if (
+        isinstance(args.force_image_size, (tuple, list))
+        and len(args.force_image_size) == 1
+    ):
         # arg is nargs, single (square) image size list -> int
         args.force_image_size = args.force_image_size[0]
     random_seed(args.seed, 0)
@@ -275,8 +300,6 @@ def main(args):
     args.image_size = model.vision_model.config.image_size
     #############################################################################
 
-
-
     if args.distill:
         # FIXME: currenlty assumes the model your distilling from has the same tokenizer & transforms.
         dist_model, _, _ = create_model_and_transforms(
@@ -287,14 +310,19 @@ def main(args):
             output_dict=True,
         )
     if args.use_bnb_linear is not None:
-        print('=> using a layer from bitsandbytes.\n'
-              '   this is an experimental feature which requires two extra pip installs\n'
-              '   pip install bitsandbytes triton'
-              '   please make sure to use triton 2.0.0')
+        print(
+            "=> using a layer from bitsandbytes.\n"
+            "   this is an experimental feature which requires two extra pip installs\n"
+            "   pip install bitsandbytes triton"
+            "   please make sure to use triton 2.0.0"
+        )
         import bitsandbytes as bnb
         from open_clip.utils import replace_linear
-        print(f'=> replacing linear layers with {args.use_bnb_linear}')
-        linear_replacement_cls = getattr(bnb.nn.triton_based_modules, args.use_bnb_linear)
+
+        print(f"=> replacing linear layers with {args.use_bnb_linear}")
+        linear_replacement_cls = getattr(
+            bnb.nn.triton_based_modules, args.use_bnb_linear
+        )
         replace_linear(model, linear_replacement_cls)
         model = model.to(device)
 
@@ -315,26 +343,25 @@ def main(args):
             param.requires_grad = False
         if args.add_time_attn:
             for name, param in model.vision_model.encoder.layers.named_parameters():
-                if 'temporal' in name:
+                if "temporal" in name:
                     param.requires_grad = True
                 else:
                     param.requires_grad = False
         else:
             for name, param in model.vision_model.encoder.layers.named_parameters():
-                if 'self_attn' in name:
+                if "self_attn" in name:
                     param.requires_grad = True
                 else:
                     param.requires_grad = False
     else:
         if args.add_time_attn:
             for name, param in model.vision_model.encoder.layers.named_parameters():
-                if 'temporal_embedding' in name or 'temporal_layer_norm1' in name:
+                if "temporal_embedding" in name or "temporal_layer_norm1" in name:
                     param.requires_grad = True
 
     for param in model.vision_model.embeddings.position_embedding.parameters():
         param.requires_grad = False
     model.vision_model.embeddings.class_embedding.requires_grad = True
-
 
     if args.lock_text:
         for param in model.text_model.parameters():
@@ -345,7 +372,7 @@ def main(args):
     model.logit_scale.requires_grad = args.learn_temp
 
     if is_master(args):
-        print_trainable_parameters(model, msg='The model: ')
+        print_trainable_parameters(model, msg="The model: ")
 
     if args.grad_checkpointing:
         # model.text_model.encoder.gradient_checkpointing = args.grad_checkpointing
@@ -357,7 +384,6 @@ def main(args):
         #     model.vision_model.encoder.gradient_checkpointing = args.grad_checkpointing
         #     for m in model.vision_model.encoder.layers:
         #         m.gradient_checkpointing = False
-
 
     if is_master(args):
         logging.info("Model:")
@@ -376,36 +402,83 @@ def main(args):
         ddp_args = {}
         if args.ddp_static_graph:
             # this doesn't exist in older PyTorch, arg only added if enabled
-            ddp_args['static_graph'] = True
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[device], **ddp_args)
+            ddp_args["static_graph"] = True
+        model = torch.nn.parallel.DistributedDataParallel(
+            model, device_ids=[device], **ddp_args
+        )
 
         if args.distill:
-            dist_model = torch.nn.parallel.DistributedDataParallel(dist_model, device_ids=[device], **ddp_args)
+            dist_model = torch.nn.parallel.DistributedDataParallel(
+                dist_model, device_ids=[device], **ddp_args
+            )
 
     # create optimizer and scaler
     ############################################################
     # if args.train_data or args.dataset_type == "synthetic":
-    assert not args.trace, 'Cannot train with traced model'
+    assert not args.trace, "Cannot train with traced model"
 
-    no_decay = lambda n, p: p.ndim < 2 or "bn" in n or "ln" in n or "bias" in n or 'logit_scale' in n or 'class_embedding' in n or 'patch_embedding' in n
+    no_decay = (
+        lambda n, p: p.ndim < 2
+        or "bn" in n
+        or "ln" in n
+        or "bias" in n
+        or "logit_scale" in n
+        or "class_embedding" in n
+        or "patch_embedding" in n
+    )
     decay = lambda n, p: not no_decay(n, p)
 
     lora = lambda n, p: "lora" in n
     non_lora = lambda n, p: not lora(n, p)
 
     named_parameters = list(model.named_parameters())
-    no_decay_non_lora_params = [[n, p] for n, p in named_parameters if no_decay(n, p) and non_lora(n, p) and p.requires_grad]
-    decay_non_lora_params = [[n, p] for n, p in named_parameters if decay(n, p) and non_lora(n, p) and p.requires_grad]
+    no_decay_non_lora_params = [
+        [n, p]
+        for n, p in named_parameters
+        if no_decay(n, p) and non_lora(n, p) and p.requires_grad
+    ]
+    decay_non_lora_params = [
+        [n, p]
+        for n, p in named_parameters
+        if decay(n, p) and non_lora(n, p) and p.requires_grad
+    ]
 
-    no_decay_lora_params = [[n, p] for n, p in named_parameters if no_decay(n, p) and lora(n, p) and p.requires_grad]
-    decay_lora_params = [[n, p] for n, p in named_parameters if decay(n, p) and lora(n, p) and p.requires_grad]
-
+    no_decay_lora_params = [
+        [n, p]
+        for n, p in named_parameters
+        if no_decay(n, p) and lora(n, p) and p.requires_grad
+    ]
+    decay_lora_params = [
+        [n, p]
+        for n, p in named_parameters
+        if decay(n, p) and lora(n, p) and p.requires_grad
+    ]
 
     param_groups = []
-    if no_decay_non_lora_params: param_groups.append({"params": [p for n, p in no_decay_non_lora_params], "weight_decay": 0., 'lr': args.lr * args.coef_lr})
-    if decay_non_lora_params: param_groups.append({"params": [p for n, p in decay_non_lora_params], "weight_decay": args.wd, 'lr': args.lr * args.coef_lr})
-    if no_decay_lora_params: param_groups.append({"params": [p for n, p in no_decay_lora_params], "weight_decay": 0.})
-    if decay_lora_params: param_groups.append({"params": [p for n, p in decay_lora_params], "weight_decay": args.wd})
+    if no_decay_non_lora_params:
+        param_groups.append(
+            {
+                "params": [p for n, p in no_decay_non_lora_params],
+                "weight_decay": 0.0,
+                "lr": args.lr * args.coef_lr,
+            }
+        )
+    if decay_non_lora_params:
+        param_groups.append(
+            {
+                "params": [p for n, p in decay_non_lora_params],
+                "weight_decay": args.wd,
+                "lr": args.lr * args.coef_lr,
+            }
+        )
+    if no_decay_lora_params:
+        param_groups.append(
+            {"params": [p for n, p in no_decay_lora_params], "weight_decay": 0.0}
+        )
+    if decay_lora_params:
+        param_groups.append(
+            {"params": [p for n, p in decay_lora_params], "weight_decay": args.wd}
+        )
 
     optimizer = optim.AdamW(
         # [
@@ -422,13 +495,25 @@ def main(args):
 
     name_groups = {}
     if no_decay_non_lora_params:
-        name_groups['no_decay_non_lora_params'] = [{"name": n, "weight_decay": 0., 'lr': args.lr * args.coef_lr} for n, p in no_decay_non_lora_params]
+        name_groups["no_decay_non_lora_params"] = [
+            {"name": n, "weight_decay": 0.0, "lr": args.lr * args.coef_lr}
+            for n, p in no_decay_non_lora_params
+        ]
     if decay_non_lora_params:
-        name_groups['decay_non_lora_params'] = [{"name": n, "weight_decay": args.wd, 'lr': args.lr * args.coef_lr} for n, p in decay_non_lora_params]
+        name_groups["decay_non_lora_params"] = [
+            {"name": n, "weight_decay": args.wd, "lr": args.lr * args.coef_lr}
+            for n, p in decay_non_lora_params
+        ]
     if no_decay_lora_params:
-        name_groups['no_decay_lora_params'] = [{"name": n, "weight_decay": 0., 'lr': args.lr} for n, p in no_decay_lora_params]
+        name_groups["no_decay_lora_params"] = [
+            {"name": n, "weight_decay": 0.0, "lr": args.lr}
+            for n, p in no_decay_lora_params
+        ]
     if decay_lora_params:
-        name_groups['decay_lora_params'] = [{"name": n, "weight_decay": args.wd, 'lr': args.lr} for n, p in decay_lora_params]
+        name_groups["decay_lora_params"] = [
+            {"name": n, "weight_decay": args.wd, "lr": args.lr}
+            for n, p in decay_lora_params
+        ]
     if is_master(args):
         params_file = os.path.join(args.logs, args.name, "params.txt")
         with open(params_file, "w") as f:
@@ -436,12 +521,17 @@ def main(args):
                 logging.info(f"Group name: {group_name}:")
                 f.write(f"Group name: {group_name}:\n")
                 for i in group:
-                    logging.info(f"Parameter name: {i['name']}. Learning rate: {i['lr']}. Weight decay: {i['weight_decay']}")
-                    f.write(f"Parameter name: {i['name']}. Learning rate: {i['lr']}. Weight decay: {i['weight_decay']}\n")
-
+                    logging.info(
+                        f"Parameter name: {i['name']}. Learning rate: {i['lr']}. Weight decay: {i['weight_decay']}"
+                    )
+                    f.write(
+                        f"Parameter name: {i['name']}. Learning rate: {i['lr']}. Weight decay: {i['weight_decay']}\n"
+                    )
 
     if args.horovod:
-        optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())
+        optimizer = hvd.DistributedOptimizer(
+            optimizer, named_parameters=model.named_parameters()
+        )
         hvd.broadcast_parameters(model.state_dict(), root_rank=0)
         hvd.broadcast_optimizer_state(optimizer, root_rank=0)
 
@@ -451,24 +541,32 @@ def main(args):
     # optionally resume from a checkpoint
     start_epoch = 0
     if args.resume is not None:
-        checkpoint = pt_load(args.resume, map_location='cpu')
-        if 'epoch' in checkpoint:
+        checkpoint = pt_load(args.resume, map_location="cpu")
+        if "epoch" in checkpoint:
             # resuming a train checkpoint w/ epoch and optimizer state
             start_epoch = checkpoint["epoch"]
             sd = checkpoint["state_dict"]
-            if not args.distributed and next(iter(sd.items()))[0].startswith('module'):
-                sd = {k[len('module.'):]: v for k, v in sd.items()}
+            if not args.distributed and next(iter(sd.items()))[0].startswith("module"):
+                sd = {k[len("module.") :]: v for k, v in sd.items()}
             miss, unexpect = model.load_state_dict(sd, strict=False)
             # print(miss, unexpect)
-            assert unexpect == [] or unexpect == ['text_model.embeddings.position_ids'] or unexpect == ['module.text_model.embeddings.position_ids']
-            if unexpect == ['text_model.embeddings.position_ids'] or unexpect == ['module.text_model.embeddings.position_ids']:
+            assert (
+                unexpect == []
+                or unexpect == ["text_model.embeddings.position_ids"]
+                or unexpect == ["module.text_model.embeddings.position_ids"]
+            )
+            if unexpect == ["text_model.embeddings.position_ids"] or unexpect == [
+                "module.text_model.embeddings.position_ids"
+            ]:
                 logging.warning(f"Unexpected key: {unexpect}")
             if optimizer is not None:
                 if args.do_train:
                     optimizer.load_state_dict(checkpoint["optimizer"])
-            if scaler is not None and 'scaler' in checkpoint:
-                scaler.load_state_dict(checkpoint['scaler'])
-            logging.info(f"=> resuming checkpoint '{args.resume}' (epoch {start_epoch})")
+            if scaler is not None and "scaler" in checkpoint:
+                scaler.load_state_dict(checkpoint["scaler"])
+            logging.info(
+                f"=> resuming checkpoint '{args.resume}' (epoch {start_epoch})"
+            )
         else:
             # loading a bare (model only) checkpoint for fine-tune or evaluation
             model.load_state_dict(checkpoint)
@@ -478,30 +576,42 @@ def main(args):
     data = get_data(args, epoch=start_epoch)
     if is_master(args):
         logging.info(f"{data})")
-    assert len(data), 'At least one train or eval dataset must be specified.'
+    assert len(data), "At least one train or eval dataset must be specified."
 
     # create scheduler if train
     scheduler = None
-    if f'{args.clip_type}_pt' in data and optimizer is not None:
-        total_steps = (data[f'{args.clip_type}_pt'].dataloader.num_batches // args.accum_freq) * args.epochs
+    if f"{args.clip_type}_pt" in data and optimizer is not None:
+        total_steps = (
+            data[f"{args.clip_type}_pt"].dataloader.num_batches // args.accum_freq
+        ) * args.epochs
         if args.lr_scheduler == "cosine":
             scheduler = cosine_lr(optimizer, args.lr, args.warmup, total_steps)
         elif args.lr_scheduler == "const":
             scheduler = const_lr(optimizer, args.lr, args.warmup, total_steps)
         elif args.lr_scheduler == "const-cooldown":
-            assert args.epochs_cooldown is not None, \
-                "Please specify the number of cooldown epochs for this lr schedule."
-            cooldown_steps = (data[f'{args.clip_type}_pt'].dataloader.num_batches // args.accum_freq) * args.epochs_cooldown
+            assert (
+                args.epochs_cooldown is not None
+            ), "Please specify the number of cooldown epochs for this lr schedule."
+            cooldown_steps = (
+                data[f"{args.clip_type}_pt"].dataloader.num_batches // args.accum_freq
+            ) * args.epochs_cooldown
             scheduler = const_lr_cooldown(
-                optimizer, args.lr, args.warmup, total_steps,
-                cooldown_steps, args.lr_cooldown_power, args.lr_cooldown_end)
+                optimizer,
+                args.lr,
+                args.warmup,
+                total_steps,
+                cooldown_steps,
+                args.lr_cooldown_power,
+                args.lr_cooldown_end,
+            )
         else:
             logging.error(
-                f'Unknown scheduler, {args.lr_scheduler}. Available options are: cosine, const, const-cooldown.')
+                f"Unknown scheduler, {args.lr_scheduler}. Available options are: cosine, const, const-cooldown."
+            )
             exit(1)
 
     # determine if this worker should save logs and checkpoints. only do so if it is rank == 0
-    args.save_logs = args.logs and args.logs.lower() != 'none' and is_master(args)
+    args.save_logs = args.logs and args.logs.lower() != "none" and is_master(args)
     writer = None
     if args.save_logs and args.tensorboard:
         assert tensorboard is not None, "Please install tensorboard."
@@ -529,34 +639,35 @@ def main(args):
     #     logging.debug('Finished loading wandb.')
 
     if args.torchcompile:
-        logging.info('Compiling model...')
+        logging.info("Compiling model...")
         model = torch.compile(model)
 
-    if f'{args.clip_type}_pt' not in data:
+    if f"{args.clip_type}_pt" not in data:
         # If using int8, convert to inference mode.
         if args.use_bnb_linear is not None:
             from open_clip.utils import convert_int8_model_to_inference_mode
+
             convert_int8_model_to_inference_mode(model)
         # Evaluate.
         if "i_cls" in data:
             evaluate_i_cls(model, data, start_epoch, args, writer)
         if "vl_ret" in data:
-            for sub_data in data['vl_ret']:
+            for sub_data in data["vl_ret"]:
                 evaluate_vl_ret(model, sub_data, start_epoch, args, writer)
         if "a_cls" in data:
-            for sub_data in data['a_cls']:
+            for sub_data in data["a_cls"]:
                 evaluate_a_cls(model, sub_data, start_epoch, args, writer)
         if "al_ret" in data:
-            for sub_data in data['al_ret']:
+            for sub_data in data["al_ret"]:
                 evaluate_al_ret(model, sub_data, start_epoch, args, writer)
         if "v_cls" in data:
-            for sub_data in data['v_cls']:
+            for sub_data in data["v_cls"]:
                 evaluate_v_cls(model, sub_data, start_epoch, args, writer)
         if "d_cls" in data:
-            for sub_data in data['d_cls']:
+            for sub_data in data["d_cls"]:
                 evaluate_d_cls(model, sub_data, start_epoch, args, writer)
         if "t_cls" in data:
-            for sub_data in data['t_cls']:
+            for sub_data in data["t_cls"]:
                 evaluate_t_cls(model, sub_data, start_epoch, args, writer)
         return
 
@@ -564,30 +675,41 @@ def main(args):
 
     for epoch in range(start_epoch, args.epochs):
         if is_master(args):
-            logging.info(f'Start epoch {epoch}')
+            logging.info(f"Start epoch {epoch}")
 
-        train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist_model, args, tb_writer=writer)
+        train_one_epoch(
+            model,
+            data,
+            loss,
+            epoch,
+            optimizer,
+            scaler,
+            scheduler,
+            dist_model,
+            args,
+            tb_writer=writer,
+        )
         completed_epoch = epoch + 1
 
         if "i_cls" in data:
             evaluate_i_cls(model, data, completed_epoch, args, writer)
         if "vl_ret" in data:
-            for sub_data in data['vl_ret']:
+            for sub_data in data["vl_ret"]:
                 evaluate_vl_ret(model, sub_data, completed_epoch, args, writer)
         if "a_cls" in data:
-            for sub_data in data['a_cls']:
+            for sub_data in data["a_cls"]:
                 evaluate_a_cls(model, sub_data, completed_epoch, args, writer)
         if "al_ret" in data:
-            for sub_data in data['al_ret']:
+            for sub_data in data["al_ret"]:
                 evaluate_al_ret(model, sub_data, completed_epoch, args, writer)
         if "v_cls" in data:
-            for sub_data in data['v_cls']:
+            for sub_data in data["v_cls"]:
                 evaluate_v_cls(model, sub_data, completed_epoch, args, writer)
         if "d_cls" in data:
-            for sub_data in data['d_cls']:
+            for sub_data in data["d_cls"]:
                 evaluate_d_cls(model, sub_data, completed_epoch, args, writer)
         if "t_cls" in data:
-            for sub_data in data['t_cls']:
+            for sub_data in data["t_cls"]:
                 evaluate_t_cls(model, sub_data, completed_epoch, args, writer)
 
         # Saving checkpoints.
@@ -602,21 +724,25 @@ def main(args):
                 checkpoint_dict["scaler"] = scaler.state_dict()
 
             if completed_epoch == args.epochs or (
-                    args.save_frequency > 0 and (completed_epoch % args.save_frequency) == 0
+                args.save_frequency > 0 and (completed_epoch % args.save_frequency) == 0
             ):
                 torch.save(
                     checkpoint_dict,
                     os.path.join(args.checkpoint_path, f"epoch_{completed_epoch}.pt"),
                 )
             if args.delete_previous_checkpoint:
-                previous_checkpoint = os.path.join(args.checkpoint_path, f"epoch_{completed_epoch - 1}.pt")
+                previous_checkpoint = os.path.join(
+                    args.checkpoint_path, f"epoch_{completed_epoch - 1}.pt"
+                )
                 if os.path.exists(previous_checkpoint):
                     os.remove(previous_checkpoint)
 
             if args.save_most_recent:
                 # try not to corrupt the latest checkpoint if save fails
                 tmp_save_path = os.path.join(args.checkpoint_path, "tmp.pt")
-                latest_save_path = os.path.join(args.checkpoint_path, LATEST_CHECKPOINT_NAME)
+                latest_save_path = os.path.join(
+                    args.checkpoint_path, LATEST_CHECKPOINT_NAME
+                )
                 torch.save(checkpoint_dict, tmp_save_path)
                 os.replace(tmp_save_path, latest_save_path)
 
@@ -625,21 +751,22 @@ def main(args):
 
     # run a final sync.
     if remote_sync_process is not None:
-        logging.info('Final remote sync.')
+        logging.info("Final remote sync.")
         remote_sync_process.terminate()
         result = remote_sync(
             os.path.join(args.logs, args.name),
             os.path.join(args.remote_sync, args.name),
-            args.remote_sync_protocol
+            args.remote_sync_protocol,
         )
         if result:
-            logging.info('Final remote sync successful.')
+            logging.info("Final remote sync successful.")
         else:
-            logging.info('Final remote sync failed.')
+            logging.info("Final remote sync failed.")
 
 
 def copy_codebase(args):
     from shutil import copytree, ignore_patterns
+
     new_code_path = os.path.join(args.logs, args.name, "code")
     if os.path.exists(new_code_path):
         print(
@@ -650,7 +777,9 @@ def copy_codebase(args):
     current_code_path = os.path.realpath(__file__)
     for _ in range(3):
         current_code_path = os.path.dirname(current_code_path)
-    copytree(current_code_path, new_code_path, ignore=ignore_patterns('log', 'logs', 'wandb'))
+    copytree(
+        current_code_path, new_code_path, ignore=ignore_patterns("log", "logs", "wandb")
+    )
     print("Done copying code.")
     return 1
 

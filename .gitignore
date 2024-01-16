@@ -163,3 +163,4 @@ hf_token
 *.tar
 temp
 cache_dir
+wandb

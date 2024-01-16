@@ -1,0 +1,304 @@
+import os
+
+os.environ["WANDB_PROJECT"] = "semeval_emotion_classification"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+import torch
+from transformers.modeling_outputs import TokenClassifierOutput
+
+from semeval.experiments.kosenko.language_bind.LanguageBind.languagebind import (
+    LanguageBind,
+    to_device,
+    transform_dict,
+    LanguageBindImageTokenizer,
+)
+from typing import Dict, List, Optional
+from torch import nn
+from torch.utils.data import Dataset
+from transformers import Trainer
+from transformers import TrainingArguments
+import datasets
+
+import numpy as np
+import random
+
+
+def random_seed(seed=42, rank=0):
+    torch.manual_seed(seed + rank)
+    np.random.seed(seed + rank)
+    random.seed(seed + rank)
+
+
+from datasets import load_dataset
+from torchvision.io import read_video
+import json
+import torch
+import os
+from torch.utils.data import Dataset, DataLoader
+import tqdm
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import f1_score
+
+
+class CustomTrainer(Trainer):
+    def compute_loss(
+        self,
+        model,
+        inputs,
+        return_outputs=False,
+    ):
+        video_paths = [
+            f"{base_path}/{video_path}"
+            for base_path, video_path in zip(
+                inputs["video_base_path"], inputs["video_name"]
+            )
+        ]
+        custom_inputs = {
+            "video": to_device(
+                modality_transform["video"](video_paths),
+                device,
+            ),
+            "language": to_device(
+                tokenizer(
+                    inputs["text"],
+                    max_length=77,
+                    padding="max_length",
+                    truncation=True,
+                    return_tensors="pt",
+                ),
+                device,
+            ),
+        }
+
+        # forward pass
+        outputs = model(custom_inputs)
+        label = inputs["label"].to(device)
+        loss_func = torch.nn.CrossEntropyLoss()
+        loss = loss_func(outputs, label)
+        return (loss, outputs) if return_outputs else loss
+
+    def get_train_dataloader(self):
+        train_dataset = self.train_dataset
+        return DataLoader(
+            train_dataset,
+            batch_size=self.args.per_device_train_batch_size,
+            shuffle=True,
+        )
+
+    def get_eval_dataloader(self, eval_dataset):
+        return DataLoader(
+            self.eval_dataset,
+            batch_size=self.args.per_device_eval_batch_size,
+            shuffle=False,
+        )
+
+    def prediction_step(
+        self,
+        model,
+        inputs,
+        prediction_loss_only,
+        ignore_keys=None,
+    ):
+        model.eval()
+        with torch.no_grad():
+            video_paths = [
+                f"{base_path}/{video_path}"
+                for base_path, video_path in zip(
+                    inputs["video_base_path"], inputs["video_name"]
+                )
+            ]
+            custom_inputs = {
+                "video": to_device(
+                    modality_transform["video"](video_paths),
+                    device,
+                ),
+                "language": to_device(
+                    tokenizer(
+                        inputs["text"],
+                        max_length=77,
+                        padding="max_length",
+                        truncation=True,
+                        return_tensors="pt",
+                    ),
+                    device,
+                ),
+            }
+
+            # forward pass
+            outputs = model(custom_inputs)
+            label = inputs["label"].to(device)
+            loss_func = torch.nn.CrossEntropyLoss()
+            loss = loss_func(outputs, label)
+        if prediction_loss_only:
+            return (loss, None, None)
+
+        return (loss, outputs, label)
+
+
+def compute_metrics(eval_preds):
+    # metric = evaluate.load("glue", "mrpc")
+    # print(eval_preds)
+    # logits, labels = eval_preds
+    predictions = eval_preds.predictions.argmax(-1)
+    labels = eval_preds.label_ids
+    # return metric.compute(predictions=predictions, references=labels)
+    f1_score_result = f1_score(
+        labels,
+        predictions,
+        average="macro",
+    )
+    return {
+        "f1_score": f1_score_result,
+    }
+
+
+class VideoTextClassif(torch.nn.Module):
+    def __init__(self, labels=2, clip_type=None):
+        super().__init__()
+        self.model = LanguageBind(
+            clip_type=clip_type,
+            cache_dir="/code/cache_dir",
+        )
+        self.linear = torch.nn.Linear(
+            768 * 2,
+            labels,
+            bias=False,
+        )
+
+    def forward(self, x):
+        result = self.model(x)
+        # print(result)
+        features = torch.cat(
+            [
+                result["video"],
+                result["language"],
+            ],
+            dim=-1,
+        )
+        result = self.linear(features)
+        return result
+
+
+class ConversationsDataset(Dataset):
+    def __init__(
+        self,
+        conversations,
+        base_video_path="/code/SemEval-2024_Task3/training_data/train",
+    ):
+        self.conversations = conversations
+
+        self.base_video_path = base_video_path
+
+    def __len__(self):
+        return len(self.conversations)
+
+    def __getitem__(self, idx):
+        turn = self.conversations[idx]
+
+        turn["video_name"] = turn["video_name"]
+        turn["video_base_path"] = self.base_video_path
+        # print(video_path)
+        turn["label"] = emotions2labels[turn["emotion"]]
+
+        return turn
+
+
+if __name__ == "__main__":
+    dataset_path = "./SemEval-2024_Task3/training_data/Subtask_2_train.json"
+
+    dataset = json.loads(open(dataset_path).read())
+    print(len(dataset))
+
+    # dataset[0]
+
+    all_conversations = []
+
+    for item in dataset:
+        all_conversations.extend(item["conversation"])
+    print(len(all_conversations))
+
+    all_emotions = [
+        "surprise",
+        "fear",
+        "sadness",
+        "neutral",
+        "joy",
+        "anger",
+        "disgust",
+    ]
+
+    emotions2labels = {em: i for i, em in enumerate(all_emotions)}
+
+    labels2emotions = {i: em for i, em in enumerate(all_emotions)}
+
+    print(emotions2labels)
+
+    print(labels2emotions)
+
+    training_data_list, test_data_list = train_test_split(
+        all_conversations, test_size=0.04
+    )
+    # training_data_list = training_data_list[:1000]
+    # test_data_list = test_data_list[:200]
+    training_data = ConversationsDataset(conversations=training_data_list)
+    test_data = ConversationsDataset(conversations=test_data_list)
+
+    # train_dataloader = DataLoader(training_data, batch_size=2, shuffle=True)
+    # test_dataloader = DataLoader(test_data, batch_size=2, shuffle=False)
+
+    # next(iter(train_dataloader))
+    device = "cuda:0"
+    device = torch.device(device)
+    clip_type = {
+        "video": "LanguageBind_Video_FT",
+    }
+    text_video_classif = VideoTextClassif(
+        labels=len(all_emotions),
+        clip_type=clip_type,
+    )
+    text_video_classif = text_video_classif.to(device)
+    # text_video_classif.half()
+    pretrained_ckpt = f"LanguageBind/LanguageBind_Image"
+    tokenizer = LanguageBindImageTokenizer.from_pretrained(
+        pretrained_ckpt, cache_dir="/code/cache_dir/tokenizer_cache_dir"
+    )
+    modality_transform = {
+        c: transform_dict[c](text_video_classif.model.modality_config[c])
+        for c in clip_type.keys()
+    }
+
+    training_args = TrainingArguments(
+        output_dir="semeval/experiments/kosenko/language_bind/train_results/",
+        evaluation_strategy="steps",
+        eval_steps=500,
+        # eval_steps=1,
+        num_train_epochs=10,
+        report_to="wandb",
+        logging_steps=5,
+        per_device_train_batch_size=4,
+        per_device_eval_batch_size=4,
+        gradient_accumulation_steps=8,
+        bf16=True,
+        remove_unused_columns=False,
+        label_names=[
+            "utterance_ID",
+            "text",
+            "speaker",
+            "emotion",
+            "video_name",
+            "label",
+        ],
+    )
+
+    # hf_training_data = datasets.Dataset.from_list([item for item in training_data])
+    # hf_test_data = datasets.Dataset.from_list([item for item in test_data])
+
+    trainer = CustomTrainer(
+        model=text_video_classif,
+        args=training_args,
+        # train_dataset=hf_training_data,
+        # eval_dataset=hf_test_data,
+        train_dataset=training_data,
+        eval_dataset=test_data,
+        compute_metrics=compute_metrics,
+    )
+    trainer.train()
