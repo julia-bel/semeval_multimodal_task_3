@@ -164,3 +164,4 @@ hf_token
 temp
 cache_dir
 wandb
+train_results

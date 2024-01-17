@@ -28,6 +28,8 @@ def random_seed(seed=42, rank=0):
     random.seed(seed + rank)
 
 
+random_seed()
+
 from datasets import load_dataset
 from torchvision.io import read_video
 import json
@@ -203,19 +205,6 @@ class ConversationsDataset(Dataset):
 
 
 if __name__ == "__main__":
-    dataset_path = "./SemEval-2024_Task3/training_data/Subtask_2_train.json"
-
-    dataset = json.loads(open(dataset_path).read())
-    print(len(dataset))
-
-    # dataset[0]
-
-    all_conversations = []
-
-    for item in dataset:
-        all_conversations.extend(item["conversation"])
-    print(len(all_conversations))
-
     all_emotions = [
         "surprise",
         "fear",
@@ -234,18 +223,13 @@ if __name__ == "__main__":
 
     print(labels2emotions)
 
-    training_data_list, test_data_list = train_test_split(
-        all_conversations, test_size=0.04
-    )
+    dataset = load_dataset("dim/SemEval_training_data_emotions")
+    training_data_list, test_data_list = dataset["train"], dataset["test"]
     # training_data_list = training_data_list[:1000]
     # test_data_list = test_data_list[:200]
     training_data = ConversationsDataset(conversations=training_data_list)
     test_data = ConversationsDataset(conversations=test_data_list)
 
-    # train_dataloader = DataLoader(training_data, batch_size=2, shuffle=True)
-    # test_dataloader = DataLoader(test_data, batch_size=2, shuffle=False)
-
-    # next(iter(train_dataloader))
     device = "cuda:0"
     device = torch.device(device)
     clip_type = {
@@ -256,10 +240,10 @@ if __name__ == "__main__":
         clip_type=clip_type,
     )
     text_video_classif = text_video_classif.to(device)
-    # text_video_classif.half()
     pretrained_ckpt = f"LanguageBind/LanguageBind_Image"
     tokenizer = LanguageBindImageTokenizer.from_pretrained(
-        pretrained_ckpt, cache_dir="/code/cache_dir/tokenizer_cache_dir"
+        pretrained_ckpt,
+        cache_dir="/code/cache_dir/tokenizer_cache_dir",
     )
     modality_transform = {
         c: transform_dict[c](text_video_classif.model.modality_config[c])
@@ -268,35 +252,22 @@ if __name__ == "__main__":
 
     training_args = TrainingArguments(
         output_dir="semeval/experiments/kosenko/language_bind/train_results/",
-        evaluation_strategy="steps",
-        eval_steps=500,
-        # eval_steps=1,
+        evaluation_strategy="epoch",
         num_train_epochs=10,
+        save_strategy="epoch",
+        save_total_limit=1,
         report_to="wandb",
         logging_steps=5,
         per_device_train_batch_size=4,
         per_device_eval_batch_size=4,
-        gradient_accumulation_steps=8,
+        gradient_accumulation_steps=16,
         bf16=True,
         remove_unused_columns=False,
-        label_names=[
-            "utterance_ID",
-            "text",
-            "speaker",
-            "emotion",
-            "video_name",
-            "label",
-        ],
     )
-
-    # hf_training_data = datasets.Dataset.from_list([item for item in training_data])
-    # hf_test_data = datasets.Dataset.from_list([item for item in test_data])
 
     trainer = CustomTrainer(
         model=text_video_classif,
         args=training_args,
-        # train_dataset=hf_training_data,
-        # eval_dataset=hf_test_data,
         train_dataset=training_data,
         eval_dataset=test_data,
         compute_metrics=compute_metrics,
