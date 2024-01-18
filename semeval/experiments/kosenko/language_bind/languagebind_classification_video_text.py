@@ -1,7 +1,7 @@
 import os
 
 os.environ["WANDB_PROJECT"] = "semeval_emotion_classification"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 import torch
 from transformers.modeling_outputs import TokenClassifierOutput
 

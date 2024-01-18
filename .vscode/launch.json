@@ -5,11 +5,18 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "languagebind_classification",
+			"name": "languagebind_classification_video_text",
 			"type": "python",
 			"request": "launch",
-			"module": "semeval.experiments.kosenko.language_bind.languagebind_classification",
+			"module": "semeval.experiments.kosenko.language_bind.languagebind_classification_video_text",
 			"justMyCode": false
-		}
+		},
+		{
+			"name": "languagebind_classification_video_audio_text",
+			"type": "python",
+			"request": "launch",
+			"module": "semeval.experiments.kosenko.language_bind.languagebind_classification_video_audio_text",
+			"justMyCode": false
+		},
 	]
 }
