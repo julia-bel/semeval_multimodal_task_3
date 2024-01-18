@@ -204,6 +204,31 @@ class ConversationsDataset(Dataset):
         return turn
 
 
+def exp_1_load_model(labels, clip_type):
+    text_video_classif = VideoTextClassif(
+        labels=labels,
+        clip_type=clip_type,
+    )
+    return text_video_classif
+
+
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+def exp_3_load_model(labels, clip_type):
+    text_video_classif = VideoTextClassif(
+        labels=labels,
+        clip_type=clip_type,
+    )
+    for param in text_video_classif.named_parameters():
+        if "model" in param[0]:
+            param[1].requires_grad_(False)
+            
+    print(f"Trainable params: {count_parameters(text_video_classif)}")
+    return text_video_classif
+
+
 if __name__ == "__main__":
     all_emotions = [
         "surprise",
@@ -235,7 +260,12 @@ if __name__ == "__main__":
     clip_type = {
         "video": "LanguageBind_Video_FT",
     }
-    text_video_classif = VideoTextClassif(
+
+    # text_video_classif = exp_1_load_model(
+    #     labels=len(all_emotions),
+    #     clip_type=clip_type,
+    # )
+    text_video_classif = exp_3_load_model(
         labels=len(all_emotions),
         clip_type=clip_type,
     )

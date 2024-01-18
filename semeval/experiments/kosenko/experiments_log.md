@@ -103,4 +103,22 @@ class VideoAudioTextClassif(torch.nn.Module):
         result = self.linear(features)
         return result
 ```
+Результат: 
+
+Из-за увеличения количества параметров, сеть быстро переобучается. На общем созвоне предложили заморозить все модели и оставить только линейные классификаторы.
+- [commit](https://github.com/julia-bel/SemEvalParticipants/blob/251a3a090b19351c93f7ff5d7d301fb5060e58b5/semeval/experiments/kosenko/language_bind/languagebind_classification_video_audio_text.py)
+
+- [wandb link](https://wandb.ai/dimweb/semeval_emotion_classification/runs/824rfp0q?workspace=user-dimweb)
+
+### Experiment 3
+Аналогично [experiment_1](#experiment-1). В данном эксперименте я замораживаю всю модель и оставляю только голову.
+Результат:
+f1_score еще ниже чем, при полном файнтюне. Судя по трейн лоссу, теперь модели не хватает параметров. Следует попробовать lora.
+
+- [commit](https://github.com/julia-bel/SemEvalParticipants/blob/251a3a090b19351c93f7ff5d7d301fb5060e58b5/semeval/experiments/kosenko/language_bind/languagebind_classification_video_audio_text.py)
+
+- [wandb link](https://wandb.ai/dimweb/semeval_emotion_classification/runs/824rfp0q?workspace=user-dimweb)
+
+### Experiment 4
+Аналогично [experiment_1](#experiment-1). В данном эксперименте я обучаю только лора слои. На классификатор лора слой не добавляю.
 Результат:
