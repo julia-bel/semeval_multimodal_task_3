@@ -1,7 +1,0 @@
-freeze_vit: True
-freeze_qformer: True
-frozen_llama_proj: True
-
-imagebind_ckpt_path: "/code/Video-LLaMA/ckpt_12b"
-ckpt: "/code/Video-LLaMA/ckpt_12b/VL_LLaMA_2_13B_Finetuned.pth"
-ckpt_2:  "/code/Video-LLaMA/ckpt_12b/AL_LLaMA_2_13B_Finetuned.pth"

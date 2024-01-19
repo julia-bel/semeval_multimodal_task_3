@@ -47,7 +47,7 @@ class VideoLLAMABackbone(Blip2Base):
         max_frame_pos=32,
         num_video_query_token=32,
         num_audio_query_token=8,
-        imagebind_ckpt_path="ckpt",
+        imagebind_ckpt_path="/code/Video-LLaMA/ckpt",
         equip_audio_branch=True
     ):
         super().__init__()
@@ -275,18 +275,18 @@ class VideoLLAMABackbone(Blip2Base):
     
         return llama_proj_embeds
 
-    def forward(self, batch):
-        if len(batch.size()) != 5:
-            time = 1
-            batch = einops.repeat(batch, "b c h w -> b c t h w", t=time)
+    def forward(self, video, audio=None):
+        if self.train_flag == 0: # only video branch
+            embeds = self.encode_videoQformer(video) # [b c t h w]
+        elif self.train_flag == 1: # only audio branch
+            # video = einops.rearrange(video, 'b c t h w -> b t c h w')
+            embeds = self.encode_audioQformer(audio)
+        else: # training on audio + video branchs
+            video_embeds = self.encode_videoQformer(video) # video: [b c t h w] -> [b, 32, 4096]
+            audio_embeds = self.encode_audioQformer(audio) # audio: [b t c h w] -> [b, 8,  4096]
+            embeds = torch.cat((video_embeds, audio_embeds), dim=1)
         
-        if self.train_flag == 1:
-            batch = einops.rearrange(batch, "b c t h w -> b t c h w")
-            visual_embeds = self.encode_audioQformer(batch, modality_type=ModalityType.VISION)
-        else:
-            visual_embeds = self.encode_videoQformer(batch)
-        
-        return visual_embeds
+        return embeds
 
     @classmethod
     def from_config(cls, cfg):
@@ -315,7 +315,7 @@ class VideoLLAMABackbone(Blip2Base):
 
         equip_audio_branch= cfg.get("equip_audio_branch", True)
         num_audio_query_token =  cfg.get("num_audio_query_token", 8)
-        imagebind_ckpt_path = cfg.get("imagebind_ckpt_path", "ckpt")
+        imagebind_ckpt_path = cfg.get("imagebind_ckpt_path", "/code/Video-LLaMA/ckpt")
         
         model = cls(
             vit_model=vit_model,
