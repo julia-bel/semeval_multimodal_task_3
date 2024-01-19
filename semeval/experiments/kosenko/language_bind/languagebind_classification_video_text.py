@@ -249,16 +249,40 @@ def exp_4_load_model(labels, clip_type):
         lora_dropout=0.1,
         bias="all",
         target_modules=[
-            # "k_proj",
-            # "v_proj",
-            # "q_proj",
-            # "out_proj",
-            'model*'
+            "k_proj",
+            "v_proj",
+            "q_proj",
+            "out_proj",
         ],
     )
     text_video_classif = get_peft_model(text_video_classif, peft_config)
     text_video_classif.print_trainable_parameters()
-    # text_video_classif.config.to_dict = lambda _: dict(text_video_classif.config)
+    text_video_classif.config = None
+    return text_video_classif
+
+
+def exp_5_load_model(labels, clip_type):
+    text_video_classif = VideoTextClassif(
+        labels=labels,
+        clip_type=clip_type,
+    )
+    peft_config = LoraConfig(
+        inference_mode=False,
+        r=16,
+        lora_alpha=16,
+        lora_dropout=0.1,
+        bias="all",
+        target_modules=[
+            "k_proj",
+            "v_proj",
+            "q_proj",
+            "out_proj",
+            "fc1",
+            "fc2",
+        ],
+    )
+    text_video_classif = get_peft_model(text_video_classif, peft_config)
+    text_video_classif.print_trainable_parameters()
     text_video_classif.config = None
     return text_video_classif
 
@@ -311,10 +335,11 @@ if __name__ == "__main__":
     #     labels=len(all_emotions),
     #     clip_type=clip_type,
     # )
-    text_video_classif = exp_4_load_model(
+    text_video_classif = exp_5_load_model(
         labels=len(all_emotions),
         clip_type=clip_type,
     )
+
     text_video_classif = text_video_classif.to(device)
     pretrained_ckpt = f"LanguageBind/LanguageBind_Image"
     tokenizer = LanguageBindImageTokenizer.from_pretrained(
