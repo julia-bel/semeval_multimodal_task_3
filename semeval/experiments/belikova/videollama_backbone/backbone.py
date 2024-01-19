@@ -279,11 +279,10 @@ class VideoLLAMABackbone(Blip2Base):
         if self.train_flag == 0: # only video branch
             embeds = self.encode_videoQformer(video) # [b c t h w]
         elif self.train_flag == 1: # only audio branch
-            # video = einops.rearrange(video, 'b c t h w -> b t c h w')
-            embeds = self.encode_audioQformer(audio)
+            embeds = self.encode_audioQformer(audio) # [b t c h w]
         else: # training on audio + video branchs
-            video_embeds = self.encode_videoQformer(video) # video: [b c t h w] -> [b, 32, 4096]
-            audio_embeds = self.encode_audioQformer(audio) # audio: [b t c h w] -> [b, 8,  4096]
+            video_embeds = self.encode_videoQformer(video)
+            audio_embeds = self.encode_audioQformer(audio)
             embeds = torch.cat((video_embeds, audio_embeds), dim=1)
         
         return embeds
