@@ -20,6 +20,14 @@ import datasets
 
 import numpy as np
 import random
+from peft import (
+    get_peft_config,
+    PeftModel,
+    PeftConfig,
+    get_peft_model,
+    LoraConfig,
+    TaskType,
+)
 
 
 def random_seed(seed=42, rank=0):
@@ -224,9 +232,43 @@ def exp_3_load_model(labels, clip_type):
     for param in text_video_classif.named_parameters():
         if "model" in param[0]:
             param[1].requires_grad_(False)
-            
+
     print(f"Trainable params: {count_parameters(text_video_classif)}")
     return text_video_classif
+
+
+def exp_4_load_model(labels, clip_type):
+    text_video_classif = VideoTextClassif(
+        labels=labels,
+        clip_type=clip_type,
+    )
+    peft_config = LoraConfig(
+        inference_mode=False,
+        r=16,
+        lora_alpha=16,
+        lora_dropout=0.1,
+        bias="all",
+        target_modules=[
+            # "k_proj",
+            # "v_proj",
+            # "q_proj",
+            # "out_proj",
+            'model*'
+        ],
+    )
+    text_video_classif = get_peft_model(text_video_classif, peft_config)
+    text_video_classif.print_trainable_parameters()
+    # text_video_classif.config.to_dict = lambda _: dict(text_video_classif.config)
+    text_video_classif.config = None
+    return text_video_classif
+
+
+def exp_1_get_modality_config(model):
+    return model.model.modality_config
+
+
+def exp_4_get_modality_config(model):
+    return model.model.model.modality_config
 
 
 if __name__ == "__main__":
@@ -265,7 +307,11 @@ if __name__ == "__main__":
     #     labels=len(all_emotions),
     #     clip_type=clip_type,
     # )
-    text_video_classif = exp_3_load_model(
+    # text_video_classif = exp_3_load_model(
+    #     labels=len(all_emotions),
+    #     clip_type=clip_type,
+    # )
+    text_video_classif = exp_4_load_model(
         labels=len(all_emotions),
         clip_type=clip_type,
     )
@@ -275,9 +321,9 @@ if __name__ == "__main__":
         pretrained_ckpt,
         cache_dir="/code/cache_dir/tokenizer_cache_dir",
     )
+    modality_config = exp_4_get_modality_config(text_video_classif)
     modality_transform = {
-        c: transform_dict[c](text_video_classif.model.modality_config[c])
-        for c in clip_type.keys()
+        c: transform_dict[c](modality_config[c]) for c in clip_type.keys()
     }
 
     training_args = TrainingArguments(
@@ -286,6 +332,7 @@ if __name__ == "__main__":
         num_train_epochs=10,
         save_strategy="epoch",
         save_total_limit=1,
+        # report_to="none",
         report_to="wandb",
         logging_steps=5,
         per_device_train_batch_size=4,

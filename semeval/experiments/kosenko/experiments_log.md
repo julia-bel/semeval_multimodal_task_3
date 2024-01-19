@@ -1,4 +1,4 @@
-### Experiment 1
+### Experiment 1 (dauntless-tree-10)
 Задача: построить классификатор эмоций в диалоге на основе видео, которое соответствует данному отрывку. 
 Описание эксперимента: Взять в качестве эмбеддера languagebind. Затем использовать сконкатенированные репрезентации текста и видео в качестве фич для классификатора. Отрывки текста с видео берутся из диалога независимо. Модель не имеет информации о их взаимосвязи и порядке.
 
@@ -51,7 +51,7 @@ training_args = TrainingArguments(
 
 Максимальный **f1_score 0.3646**. Согласно графику обучения видно что модель переобучилась, причем очень сильно. Для снижения данного эффекта можно применить lora. Теперь нужно попробовать сделать тоже самое, плюс добавить аудио.
 
-### Experiment 2
+### Experiment 2 (woven-microwave-12)
 Задача: построить классификатор эмоций в диалоге на основе аудио и видео, которое соответствует данному отрывку.
 Описание эксперимента: Взять в качестве эмбеддера languagebind. Затем использовать сконкатенированные репрезентации текста и видео, аудио в качестве фич для классификатора. Отрывки текста с видео, аудио берутся из диалога независимо. Модель не имеет информации о их взаимосвязи и порядке.
 
@@ -110,15 +110,34 @@ class VideoAudioTextClassif(torch.nn.Module):
 
 - [wandb link](https://wandb.ai/dimweb/semeval_emotion_classification/runs/824rfp0q?workspace=user-dimweb)
 
-### Experiment 3
+### Experiment 3 (legendary-sound-13)
 Аналогично [experiment_1](#experiment-1). В данном эксперименте я замораживаю всю модель и оставляю только голову.
 Результат:
 f1_score еще ниже чем, при полном файнтюне. Судя по трейн лоссу, теперь модели не хватает параметров. Следует попробовать lora.
 
-- [commit](https://github.com/julia-bel/SemEvalParticipants/blob/251a3a090b19351c93f7ff5d7d301fb5060e58b5/semeval/experiments/kosenko/language_bind/languagebind_classification_video_audio_text.py)
+- [commit](https://github.com/julia-bel/SemEvalParticipants/blob/01708a7c0cc1219136272c9d26cae5905532c989/semeval/experiments/kosenko/language_bind/languagebind_classification_video_text.py)
 
-- [wandb link](https://wandb.ai/dimweb/semeval_emotion_classification/runs/824rfp0q?workspace=user-dimweb)
+- [wandb link](https://wandb.ai/dimweb/semeval_emotion_classification/runs/55qtfuxr?workspace=user-dimweb)
 
 ### Experiment 4
-Аналогично [experiment_1](#experiment-1). В данном эксперименте я обучаю только лора слои. На классификатор лора слой не добавляю.
+Аналогично [experiment_1](#experiment-1). В данном эксперименте я обучаю только лора слои. На классификатор лора слой не добавляю. Лора слои добавляются только на attention механизм.
+
+Конфиг для лора.
+```python
+peft_config = LoraConfig(
+    task_type=TaskType.TOKEN_CLS,
+    inference_mode=False,
+    r=16,
+    lora_alpha=16,
+    lora_dropout=0.1,
+    bias="all",
+    target_modules=[
+        'k_proj',
+        'v_proj',
+        'q_proj',
+        'out_proj',
+    ]
+)
+```
 Результат:
+Результат намного лучше чем с простой головой, но видно что модели не хватает параметров. Даже через 10 эпох она не переобучилась. Необходимо добавить lora к большему количеству слоёв.
