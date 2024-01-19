@@ -1,5 +1,8 @@
 import os
 
+from semeval.experiments.kosenko.language_bind.languagebind_classification_video_text import exp_4_get_modality_config
+
+
 os.environ["WANDB_PROJECT"] = "semeval_emotion_classification"
 os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 import torch
@@ -39,6 +42,14 @@ from torch.utils.data import Dataset, DataLoader
 import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
+from peft import (
+    get_peft_config,
+    PeftModel,
+    PeftConfig,
+    get_peft_model,
+    LoraConfig,
+    TaskType,
+)
 
 
 class CustomTrainer(Trainer):
@@ -172,6 +183,40 @@ class VideoAudioTextClassif(torch.nn.Module):
         return result
 
 
+def exp_2_load_model(labels, clip_type):
+    text_video_classif = VideoAudioTextClassif(
+        labels=labels,
+        clip_type=clip_type,
+    )
+    return text_video_classif
+
+
+def exp_6_load_model(labels, clip_type):
+    text_video_classif = VideoAudioTextClassif(
+        labels=labels,
+        clip_type=clip_type,
+    )
+    peft_config = LoraConfig(
+        inference_mode=False,
+        r=16,
+        lora_alpha=16,
+        lora_dropout=0.1,
+        bias="all",
+        target_modules=[
+            "k_proj",
+            "v_proj",
+            "q_proj",
+            "out_proj",
+            "fc1",
+            "fc2",
+        ],
+    )
+    text_video_classif = get_peft_model(text_video_classif, peft_config)
+    text_video_classif.print_trainable_parameters()
+    text_video_classif.config = None
+    return text_video_classif
+
+
 class ConversationsDataset(Dataset):
     def __init__(
         self,
@@ -194,6 +239,9 @@ class ConversationsDataset(Dataset):
         turn["label"] = emotions2labels[turn["emotion"]]
 
         return turn
+
+def exp_2_get_modality_config(model):
+    return model.model.modality_config
 
 
 if __name__ == "__main__":
@@ -228,19 +276,26 @@ if __name__ == "__main__":
         "video": "LanguageBind_Video_FT",
         "audio": "LanguageBind_Audio_FT",
     }
-    text_video_classif = VideoAudioTextClassif(
+
+    # text_video_classif = exp_2_load_model(
+    #     labels=len(all_emotions),
+    #     clip_type=clip_type,
+    # )
+    text_video_classif = exp_6_load_model(
         labels=len(all_emotions),
         clip_type=clip_type,
     )
+
     text_video_classif = text_video_classif.to(device)
     pretrained_ckpt = f"LanguageBind/LanguageBind_Image"
     tokenizer = LanguageBindImageTokenizer.from_pretrained(
         pretrained_ckpt,
         cache_dir="/code/cache_dir/tokenizer_cache_dir",
     )
+    # modality_config = exp_2_get_modality_config(text_video_classif)
+    modality_config = exp_4_get_modality_config(text_video_classif)
     modality_transform = {
-        c: transform_dict[c](text_video_classif.model.modality_config[c])
-        for c in clip_type.keys()
+        c: transform_dict[c](modality_config[c]) for c in clip_type.keys()
     }
 
     training_args = TrainingArguments(

@@ -175,6 +175,8 @@ peft_config = LoraConfig(
 Результат:
 Увеличение количества параметров улучшило сходимость и скор по f1_score. Но это порежнему очень мало, в сравнении с полным файнтюном. По графикам обучения и эвалюации видно что теперь не хватает обобщающей способности. Необходимо задействовать аудио с текущим конфигом lora.
 
+- [commit](https://github.com/julia-bel/SemEvalParticipants/blob/e32f2350efbfc8dcb4dd0ed2e4930e374bf1dfec/semeval/experiments/kosenko/language_bind/languagebind_classification_video_text.py)
+- [wandb link](https://wandb.ai/dimweb/semeval_emotion_classification/runs/5a1v9oep?workspace=user-dimweb)
 
 ### Experiment 6
 Аналогично [experiment 2](#experiment-2-woven-microwave-12). Обучаю только lora со следующим конфигом.
@@ -195,3 +197,4 @@ peft_config = LoraConfig(
     ],
 )
 ```
+- trainable params: 20,725,504 || all params: 852,905,984 || trainable%: 2.429986937458279
