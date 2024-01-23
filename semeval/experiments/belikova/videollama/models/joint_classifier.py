@@ -43,13 +43,44 @@ class EmotionCausalClassifier(pl.LightningModule):
         )
 
     # Inference only
-    def forward(self, utterance_embeddings, utterance_lengths):
-        predicted_emotion_logits = self.emotion_classifier(utterance_embeddings)
-        emotion_embeddings = self.derive_emotion_embeddings(predicted_emotion_logits)
-        probabilities = self.causal_classifier(
-            utterance_embeddings, utterance_lengths, emotion_embeddings
+    def forward(self, modalities, utterance_lengths):
+        """
+        Args:
+            modalities (dict): {
+                "text": (batch_size, max_utterance_num, max_text_len),
+                "video": (batch_size, max_utterance_num, channels, frames, height, width),
+                "audio": (batch_size, max_utterance_num, frames, channels, height, width)
+            }
+            utterance_lengths (torch.tensor): (batch_size, max_utterance_num) mask of padding in utterance dim
+        Returns:
+            tuple: emotion and causal predictions
+        """
+        batch_size, num_utterances = utterance_lengths.shape
+
+        # Emotion classification
+        utt_modality_embeddings = [
+            self.embeddings[m](
+                modalities[m].reshape(
+                    batch_size * num_utterances, *modalities[m].shape[2:]
+                )
+            )
+            for m in self.modalities
+        ]
+        emotion_logits = self.emotion_classifier(utt_modality_embeddings)
+        emotion_predictions = torch.argmax(emotion_logits, dim=1)
+
+        # Causal classification
+        conv_modality_embeddings = [
+            e.reshape(batch_size, num_utterances, *e.shape[1:])
+            for e in utt_modality_embeddings
+        ]
+        causal_logits = self.causal_classifier(
+            conv_modality_embeddings,
+            torch.sum(utterance_lengths, dim=1),
+            emotion_logits,
         )
-        return probabilities
+        causal_predictions = (torch.sigmoid(causal_logits) >= 0.5).float()
+        return emotion_predictions, causal_predictions
 
     def training_step(self, batch, batch_idx):
         assert all([m in batch for m in self.modalities]), "incorrect modality input"
