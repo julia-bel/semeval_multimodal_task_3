@@ -1,6 +1,8 @@
 import os
 
-from semeval.experiments.kosenko.language_bind.languagebind_classification_video_text import exp_4_get_modality_config
+from semeval.experiments.kosenko.language_bind.languagebind_classification_video_text import (
+    exp_4_get_modality_config,
+)
 
 
 os.environ["WANDB_PROJECT"] = "semeval_emotion_classification"
@@ -198,9 +200,9 @@ def exp_6_load_model(labels, clip_type):
     )
     peft_config = LoraConfig(
         inference_mode=False,
-        r=16,
-        lora_alpha=16,
-        lora_dropout=0.1,
+        r=8,
+        lora_alpha=8,
+        lora_dropout=0.0,
         bias="all",
         target_modules=[
             "k_proj",
@@ -211,9 +213,17 @@ def exp_6_load_model(labels, clip_type):
             "fc2",
         ],
     )
+    # text_video_classif = PeftModel.from_pretrained(
+    #     text_video_classif,
+    #     "semeval/experiments/kosenko/language_bind/train_results/checkpoint-195",
+    #     is_trainable=True,
+    # )
     text_video_classif = get_peft_model(text_video_classif, peft_config)
     text_video_classif.print_trainable_parameters()
     text_video_classif.config = None
+    # text_video_classif.load_adapter(
+    #     model_id="semeval/experiments/kosenko/language_bind/train_results/checkpoint-979"
+    # )
     return text_video_classif
 
 
@@ -239,6 +249,7 @@ class ConversationsDataset(Dataset):
         turn["label"] = emotions2labels[turn["emotion"]]
 
         return turn
+
 
 def exp_2_get_modality_config(model):
     return model.model.modality_config
@@ -321,4 +332,6 @@ if __name__ == "__main__":
         eval_dataset=test_data,
         compute_metrics=compute_metrics,
     )
-    trainer.train()
+    trainer.train(
+        # resume_from_checkpoint="semeval/experiments/kosenko/language_bind/train_results/checkpoint-979"
+    )
