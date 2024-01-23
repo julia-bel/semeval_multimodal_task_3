@@ -2,7 +2,7 @@
 
 ### Experiment 0 (multimodal_classification_0)
 - **f1_score=0.2372**
-- [notebook](./videollama_backbone/emotion_classification_experiment_0.ipynb)
+- [notebook](./videollama/pybooks/emotion_classification_experiment_0.ipynb)
 
 **Задача**: построить классификатор эмоций в беседе на основе аудио, видео и текста, которые соответствуют некоторому отрывку беседы.
 **Описание эксперимента**: взять в качестве эмбеддера видео и аудио выделенный из VideoLLaMA backbone и текстовые эмбеддинги VideoLLaMA. Архитектура клласификатора: совместить эмбеддинги модальностей: уменьшить их размерности, применить пулинг средним, сконкатенировать. Далее применить линейную голову классификатора. Эмбеддинги не обучаются.  
@@ -65,7 +65,7 @@ def forward(self, text, video, audio):
 
 ### Experiment 1 (multimodal_classification_1)
 - **f1_score=0.4307**
-- [notebook](./videollama_backbone/emotion_classification_experiment_1.ipynb)
+- [notebook](./videollama/pybooks/emotion_classification_experiment_1.ipynb)
 
 **Задача**: построить классификатор эмоций в беседе на основе аудио, видео и текста, которые соответствуют некоторому отрывку беседы.
 **Описание эксперимента**: в данном эксперименте используются только две модальности: видео и текст (далее планируется добавить аудио). Эксперимент развивает идею Experiment 0, заменяя пулинг средним на механизм внимания и уменьшая размер скрытого представления. Эмбеддинги не обучаются.

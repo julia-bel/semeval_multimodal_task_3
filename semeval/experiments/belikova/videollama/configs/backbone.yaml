@@ -1,0 +1,7 @@
+freeze_vit: True
+freeze_qformer: True
+frozen_llama_proj: True
+
+imagebind_ckpt_path: "/code/SemEvalParticipants/semeval/experiments/belikova/videollama/ckpt"
+ckpt: "/code/SemEvalParticipants/semeval/experiments/belikova/videollama/ckpt/VL_LLaMA_2_13B_Finetuned.pth"
+ckpt_2: "/code/SemEvalParticipants/semeval/experiments/belikova/videollama/ckpt/AL_LLaMA_2_13B_Finetuned.pth"

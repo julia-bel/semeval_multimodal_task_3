@@ -20,17 +20,17 @@ all_emotions = [
 emotions2labels = {em: i for i, em in enumerate(all_emotions)}
 labels2emotions = {i: em for i, em in enumerate(all_emotions)}
 
-class SemEvalDataset(Dataset):
-    
+
+class EmotionDataset(Dataset):
     def __init__(
-            self,
-            data_name="dim/SemEval_training_data_emotions",
-            root="/code/data/video_with_audio",
-            split="train",
-            num_frames=8,
-            resize_size=224,
-            tokenizer_name="/code/Video-LLaMA/ckpt/llama-2-13b-chat-hf",
-        ):
+        self,
+        data_name="dim/SemEval_training_data_emotions",
+        root="/code/data/video_with_audio",
+        split="train",
+        num_frames=8,
+        resize_size=224,
+        tokenizer_name="/code/SemEvalParticipants/semeval/experiments/belikova/videollama/ckpt/llama-2-13b-chat-hf",
+    ):
         self.root = root
         self.annotation = load_dataset(data_name, split=split)
         self.num_frames = num_frames
@@ -47,10 +47,10 @@ class SemEvalDataset(Dataset):
             ).transform
         self.tokenizer = LlamaTokenizer.from_pretrained(tokenizer_name, use_fast=False)
         self.tokenizer.pad_token = self.tokenizer.unk_token
-        
+
     def __len__(self):
         return len(self.annotation)
-        
+
     def __getitem__(self, index, num_retries=10, device="cpu"):
         result = {}
         for _ in range(num_retries):
@@ -63,8 +63,8 @@ class SemEvalDataset(Dataset):
                         n_frms=self.num_frames,
                         height=self.resize_size,
                         width=self.resize_size,
-                        sampling ="uniform",
-                        return_msg = False,
+                        sampling="uniform",
+                        return_msg=False,
                     )
                 )
                 result["text"] = self.tokenizer(
@@ -80,15 +80,19 @@ class SemEvalDataset(Dataset):
                     clips_per_video=self.num_frames,
                 )[0]
                 result["label"] = emotions2labels[sample["emotion"]]
-                assert result["video"].shape[1] == self.num_frames == result["audio"].shape[0]
+                assert (
+                    result["video"].shape[1]
+                    == self.num_frames
+                    == result["audio"].shape[0]
+                )
             except Exception:
                 index = random.randint(0, len(self) - 1)
                 continue
             break
-        else:  
+        else:
             raise RuntimeError(f"Failed to fetch sample after {num_retries} retries.")
         return result
-    
+
     def collater(self, instances):
         text_ids = [instance["text"] for instance in instances]
         text_ids = torch.nn.utils.rnn.pad_sequence(
@@ -96,30 +100,27 @@ class SemEvalDataset(Dataset):
             batch_first=True,
             padding_value=self.tokenizer.pad_token_id,
         )
-        
+
         batch = {
-            "video": torch.stack([instance['video'] for instance in instances]),
+            "video": torch.stack([instance["video"] for instance in instances]),
             "text": text_ids,
-            "audio": torch.stack([instance['audio'] for instance in instances]),
-            "label": torch.tensor([instance['label'] for instance in instances]),
+            "audio": torch.stack([instance["audio"] for instance in instances]),
+            "label": torch.tensor([instance["label"] for instance in instances]),
         }
-        
+
         return batch
 
 
 if __name__ == "__main__":
-    train_dataset = SemEvalDataset(split="train")
-    val_dataset = SemEvalDataset(split="test")
+    train_dataset = EmotionDataset(split="train")
+    val_dataset = EmotionDataset(split="test")
     train_loader = DataLoader(
         train_dataset,
         batch_size=32,
         shuffle=True,
         num_workers=4,
-        collate_fn=train_dataset.collater
+        collate_fn=train_dataset.collater,
     )
     val_loader = DataLoader(
-        val_dataset,
-        batch_size=32,
-        num_workers=4,
-        collate_fn=val_dataset.collater
+        val_dataset, batch_size=32, num_workers=4, collate_fn=val_dataset.collater
     )
