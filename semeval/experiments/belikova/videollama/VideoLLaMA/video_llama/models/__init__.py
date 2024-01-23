@@ -15,14 +15,10 @@ from video_llama.models.base_model import BaseModel
 from video_llama.models.blip2 import Blip2Base
 from video_llama.models.video_llama import VideoLLAMA
 from video_llama.processors.base_processor import BaseProcessor
+from video_llama.models.ImageBind.data import load_and_transform_audio_data
 
 
-__all__ = [
-    "load_model",
-    "BaseModel",
-    "Blip2Base",
-    "VideoLLAMA"
-]
+__all__ = ["load_model", "BaseModel", "Blip2Base", "VideoLLAMA"]
 
 
 def load_model(name, model_type, is_eval=False, device="cpu", checkpoint=None):

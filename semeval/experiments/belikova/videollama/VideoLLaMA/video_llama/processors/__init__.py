@@ -13,9 +13,11 @@ from video_llama.processors.blip_processors import (
 )
 from video_llama.processors.video_processor import (
     AlproVideoTrainProcessor,
-    AlproVideoEvalProcessor
+    AlproVideoEvalProcessor,
 )
 from video_llama.common.registry import registry
+from video_llama.processors import AlproVideoTrainProcessor, AlproVideoEvalProcessor
+from video_llama.processors.video_processor import load_video
 
 __all__ = [
     "BaseProcessor",
