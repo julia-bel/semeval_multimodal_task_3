@@ -35,14 +35,18 @@ class CLIPVisionEmbeddings(nn.Module):
         )
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
+        # 257
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         # (b t) c h w
+        # pixel_values -> torch.Size([32, 3, 224, 224])
         batch_size = pixel_values.shape[0]
-        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
+        # torch.Size([32, 1024, 16, 16])
+        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, self.embed_dim, grid, grid]
+        # torch.Size([32, 256, 1024])
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
@@ -711,6 +715,7 @@ class CLIPVisionTransformer(nn.Module):
             if vl_new:
                 self.embeddings = CLIPVisionEmbeddings3D(config)
             else:
+                # this
                 self.embeddings = CLIPVisionEmbeddings(config)
 
         self.patch_dropout = PatchDropout(config.force_patch_dropout)
@@ -746,9 +751,12 @@ class CLIPVisionTransformer(nn.Module):
             B = b_new * pair_new * bs_new
             pixel_values = pixel_values.reshape(B*T, channel_new, h_new, w_new)
 
+        # torch.Size([4, 3, 8, 224, 224])
         elif len(pixel_values.shape) == 5:
             B, _, T, _, _ = pixel_values.shape
+            # B=4 T=8
             # print(pixel_values.shape)
+            # torch.Size([32, 3, 224, 224])
             pixel_values = rearrange(pixel_values, 'b c t h w -> (b t) c h w')
         else:
             # print(pixel_values.shape)
@@ -758,7 +766,7 @@ class CLIPVisionTransformer(nn.Module):
         hidden_states = self.embeddings(pixel_values)
 
         hidden_states = self.patch_dropout(hidden_states, B, T)  ##############################################
-
+        # torch.Size([32, 257, 1024])
         hidden_states = self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.encoder(
@@ -767,11 +775,12 @@ class CLIPVisionTransformer(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
+        # torch.Size([32, 257, 1024])
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
+        # torch.Size([32, 1024]) -> специальные классификационные эмбеддинги
         pooled_output = self.post_layernorm(pooled_output)
-
+        # torch.Size([4, 1024])
         pooled_output = pooled_output.reshape(B, T, -1).mean(1) ################################
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]

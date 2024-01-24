@@ -75,13 +75,20 @@ class LanguageBind(nn.Module):
     def forward(self, inputs):
         outputs = {}
         for key, value in inputs.items():
-            value = self.modality_encoder[key](**value)[1]
+            value_encoder = self.modality_encoder[key](**value)
+            value = value_encoder[1]
+            # video hidden shape torch.Size([32, 257, 1024])
+            # 32=batch*amount of parts 
+            # language hidden shape torch.Size([4, 77, 768])
+            # 4 - batch, 77 embeds, 768 dims
+            # video value, language torch.Size([4, 768])
             value = self.modality_proj[key](value)
             value = value / value.norm(p=2, dim=-1, keepdim=True)
             if self.use_temp:
                 if key != 'language':
                     value = value * self.modality_scale[key].exp()
             outputs[key] = value
+            outputs[f'{key}_encoder'] = value
         return outputs
 
 def to_device(x, device):
