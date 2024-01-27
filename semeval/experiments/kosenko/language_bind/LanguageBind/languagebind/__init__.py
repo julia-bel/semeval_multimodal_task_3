@@ -88,7 +88,7 @@ class LanguageBind(nn.Module):
                 if key != 'language':
                     value = value * self.modality_scale[key].exp()
             outputs[key] = value
-            outputs[f'{key}_encoder'] = value
+            outputs[f'{key}_encoder'] = value_encoder[0]
         return outputs
 
 def to_device(x, device):

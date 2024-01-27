@@ -6,7 +6,7 @@ from semeval.experiments.kosenko.language_bind.languagebind_classification_video
 
 
 os.environ["WANDB_PROJECT"] = "semeval_emotion_classification"
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 import torch
 from transformers.modeling_outputs import TokenClassifierOutput
 
@@ -185,6 +185,60 @@ class VideoAudioTextClassif(torch.nn.Module):
         return result
 
 
+class VideoAudioTextClassif2(torch.nn.Module):
+    def __init__(self, labels=2, clip_type=None):
+        super().__init__()
+        self.model = LanguageBind(
+            clip_type=clip_type,
+            cache_dir="/code/cache_dir",
+        )
+        # чтобы векторы с видео модели, совпали с векторами из языковой
+        self.video_projection = torch.nn.Linear(
+            1024,
+            768,
+            bias=False,
+        )
+        self.audio_projection = torch.nn.Linear(
+            1024,
+            768,
+            bias=False,
+        )
+        self.multihead_attn = nn.MultiheadAttention(768, 4)
+
+        self.linear = torch.nn.Linear(
+            768,
+            labels,
+        )
+
+    def forward(self, x):
+        result = self.model(x)
+        language_hidden_state = result["language_encoder"]
+        batch_size = language_hidden_state.shape[0]
+        frames = 8
+        video_hidden_state = result["video_encoder"][:, 0, :]
+        audio_hidden_state = result["audio_encoder"][:, 0, :]
+        video_hidden_state = video_hidden_state.reshape(batch_size, frames, -1)
+        video_hidden_state = self.video_projection(video_hidden_state)
+        audio_hidden_state = self.audio_projection(audio_hidden_state).unsqueeze(1)
+        total_hidden_state = torch.cat(
+            [
+                video_hidden_state,
+                audio_hidden_state,
+                language_hidden_state,
+            ],
+            dim=1,
+        )
+        total_hidden_state = language_hidden_state
+        attn_output, attn_output_weights = self.multihead_attn(
+            total_hidden_state,
+            total_hidden_state,
+            total_hidden_state,
+        )
+        feature_vector = attn_output.mean(1)
+        result = self.linear(feature_vector)
+        return result
+
+
 def exp_2_load_model(labels, clip_type):
     text_video_classif = VideoAudioTextClassif(
         labels=labels,
@@ -254,6 +308,15 @@ class ConversationsDataset(Dataset):
 def exp_2_get_modality_config(model):
     return model.model.modality_config
 
+def exp_8_load_model(labels, clip_type):
+    text_video_classif = VideoAudioTextClassif2(
+        labels=labels,
+        clip_type=clip_type,
+    )
+    for param in text_video_classif.named_parameters():
+        if "model" in param[0]:
+            param[1].requires_grad_(False)
+    return text_video_classif
 
 if __name__ == "__main__":
     all_emotions = [
@@ -274,7 +337,8 @@ if __name__ == "__main__":
 
     print(labels2emotions)
 
-    dataset = load_dataset("dim/SemEval_training_data_emotions")
+    dataset = exp_1_load_dataset()
+    # dataset = exp_9_load_dataset()
     training_data_list, test_data_list = dataset["train"], dataset["test"]
     # training_data_list = training_data_list[:1000]
     # test_data_list = test_data_list[:200]
@@ -292,7 +356,11 @@ if __name__ == "__main__":
     #     labels=len(all_emotions),
     #     clip_type=clip_type,
     # )
-    text_video_classif = exp_6_load_model(
+    # text_video_classif = exp_6_load_model(
+    #     labels=len(all_emotions),
+    #     clip_type=clip_type,
+    # )
+    text_video_classif = exp_8_load_model(
         labels=len(all_emotions),
         clip_type=clip_type,
     )
@@ -303,8 +371,8 @@ if __name__ == "__main__":
         pretrained_ckpt,
         cache_dir="/code/cache_dir/tokenizer_cache_dir",
     )
-    # modality_config = exp_2_get_modality_config(text_video_classif)
-    modality_config = exp_4_get_modality_config(text_video_classif)
+    modality_config = exp_2_get_modality_config(text_video_classif)
+    # modality_config = exp_4_get_modality_config(text_video_classif)
     modality_transform = {
         c: transform_dict[c](modality_config[c]) for c in clip_type.keys()
     }

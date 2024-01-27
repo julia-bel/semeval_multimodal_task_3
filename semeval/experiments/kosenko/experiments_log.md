@@ -204,3 +204,152 @@ peft_config = LoraConfig(
 - сеть не переобучилась, как в прошлый раз, но и не показала выдающегося результата. Это печально.
 - [commit](https://github.com/julia-bel/SemEvalParticipants/blob/33ba9ea6db522e46edd0f7bdb8aec2d4af455a2f/semeval/experiments/kosenko/language_bind/languagebind_classification_video_audio_text.py)
 - [wandb link](https://wandb.ai/dimweb/semeval_emotion_classification/runs/jqegel3m?workspace=user-dimweb)
+
+### Experiment 7-8 (hardy-lake-34/fresh-monkey-28)
+Аналогично [Experiment 3](#experiment-3-legendary-sound-13) заморозил всю остальную модель. Использовал multihead attention. Тренировал только голову.
+
+```python
+class VideoTextClassif2(torch.nn.Module):
+    def __init__(self, labels=2, clip_type=None):
+        super().__init__()
+        self.model = LanguageBind(
+            clip_type=clip_type,
+            cache_dir="/code/cache_dir",
+        )
+        # чтобы векторы с видео модели, совпали с векторами из языковой
+        self.video_projection = torch.nn.Linear(
+            1024,
+            768,
+            bias=False,
+        )
+        self.multihead_attn = nn.MultiheadAttention(768, 4)
+
+        self.linear = torch.nn.Linear(
+            768,
+            labels,
+        )
+
+    def forward(self, x):
+        result = self.model(x)
+        language_hidden_state = result["language_encoder"]
+        batch_size = language_hidden_state.shape[0]
+        frames = 8
+        video_hidden_state = result["video_encoder"][:, 0, :]
+        video_hidden_state = video_hidden_state.reshape(batch_size, frames, -1)
+        video_hidden_state = self.video_projection(video_hidden_state)
+        total_hidden_state = torch.cat(
+            [video_hidden_state, language_hidden_state],
+            dim=1,
+        )
+        total_hidden_state = language_hidden_state
+        attn_output, attn_output_weights = self.multihead_attn(
+            total_hidden_state,
+            total_hidden_state,
+            total_hidden_state,
+        )
+        feature_vector = attn_output.mean(1)
+        result = self.linear(feature_vector)
+        return result
+```
+Результат:
+- f1=35.56
+- модель показала самый низкий скор на eval loss, однако это никак не помогло ей в целевой метрике
+- [wandb-1](https://wandb.ai/dimweb/semeval_emotion_classification/runs/9c9i5n9c?workspace=user-dimweb)
+- [wandb-2](https://wandb.ai/dimweb/semeval_emotion_classification/runs/4dqtyzrp?workspace=user-dimweb)
+- В ссылках выше я использовал разное количество голов в attention. По итогу это никак не повлияло на результат, только может быть на более скорую сходимость.
+- 
+
+### Experiment 9 
+Задача: необходимо по реплике предсказать ее эмоцию и сказать какая реплика в диалоге послужила причиной данной эмоции.
+Предполагаемое решение: сначала мы берем реплику из диалога и предсказываем ее эмоцию. если эмоция не нейтральная, тогда нам нужно узнать что послужило причиной для нее(или ничего не послужило). Для этого составляем датасет с положительными и отрицательными парами.
+
+Положительная пара: 
+```text
+(
+    реплика с эмоцией,
+    реплика, которая послужила причиной для нее
+)
+```
+
+Чтобы датасет был сбалансированным необходимо в равном количестве предоставвить негативные пары.
+
+Негативные пара:
+Составляем всевозможные пары реплик. Выкидываем все положительные пары. Рандомно их перемешиваем и делаем семпл размера положительных пар.
+```text
+(
+    реплика со случайно выбранной эмоцией,
+    реплика, которая тоже была выбрана случайно парой для нее
+)
+```
+
+Одна пара имеет следующий вид(это позитивная):
+```python
+{
+    'initial': {
+        'emotion': 'sadness',
+        'speaker': 'Monica',
+        'text': 'Mr . Heckles .',
+        'utterance_ID': 1,
+        'video_name': 'dia187utt1.mp4'
+    },
+    'cause': {
+        'emotion': 'sadness',
+        'speaker': 'Monica',
+        'text': 'Mr . Heckles .',
+        'utterance_ID': 1,
+        'video_name': 'dia187utt1.mp4'
+    },
+    'label': 1
+}
+```
+
+```python
+class CauseVideoTextClassif(torch.nn.Module):
+    def __init__(self, labels=2, clip_type=None):
+        super().__init__()
+        self.model = LanguageBind(
+            clip_type=clip_type,
+            cache_dir="/code/cache_dir",
+        )
+        self.emotion_classif = torch.nn.Linear(
+            768 * 4,
+            labels,
+        )
+        self.cause_classif = torch.nn.Linear(
+            768 * 4,
+            2,
+        )
+
+    def forward(self, x):
+        initial_result = self.model(
+            {
+                "video": x["initial_video"],
+                "language": x["initial_language"],
+            }
+        )
+        cause_result = self.model(
+            {
+                "video": x["cause_video"],
+                "language": x["cause_language"],
+            }
+        )
+
+        features = torch.cat(
+            [
+                initial_result["video"],
+                initial_result["language"],
+                cause_result["video"],
+                cause_result["language"],
+            ],
+            dim=-1,
+        )
+        emotion = self.emotion_classif(features)
+        cause = self.cause_classif(features)
+        return emotion, cause
+```
+
+Результат:
+- cause_f1=64.79
+- emotion_f1=37.81
+- [wandb](https://wandb.ai/dimweb/semeval_cause_classification/runs/trju5u33?workspace=user-dimweb)
+- Сетка переобучилась, нужно попробовать оставить только лору.

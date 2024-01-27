@@ -1,6 +1,8 @@
 import os
 
-os.environ["WANDB_PROJECT"] = "semeval_emotion_classification"
+
+# os.environ["WANDB_PROJECT"] = "semeval_emotion_classification"
+os.environ["WANDB_PROJECT"] = "semeval_cause_classification"
 os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 import torch
 from transformers.modeling_outputs import TokenClassifierOutput
@@ -144,6 +146,99 @@ class CustomTrainer(Trainer):
         return (loss, outputs, label)
 
 
+class CustomTrainerCausal(CustomTrainer):
+    def compute_loss(
+        self,
+        model,
+        inputs,
+        return_outputs=False,
+    ):
+        model.train()
+        initial_video_paths = [
+            f"{base_path}/{video_path}"
+            for base_path, video_path in zip(
+                inputs["video_base_path"], inputs["initial_video_name"]
+            )
+        ]
+        causal_video_paths = [
+            f"{base_path}/{video_path}"
+            for base_path, video_path in zip(
+                inputs["video_base_path"], inputs["cause_video_name"]
+            )
+        ]
+        custom_inputs = {
+            "initial_video": to_device(
+                modality_transform["video"](initial_video_paths),
+                device,
+            ),
+            "cause_video": to_device(
+                modality_transform["video"](causal_video_paths),
+                device,
+            ),
+            "initial_language": to_device(
+                tokenizer(
+                    inputs["initial_text"],
+                    max_length=77,
+                    padding="max_length",
+                    truncation=True,
+                    return_tensors="pt",
+                ),
+                device,
+            ),
+            "cause_language": to_device(
+                tokenizer(
+                    inputs["cause_text"],
+                    max_length=77,
+                    padding="max_length",
+                    truncation=True,
+                    return_tensors="pt",
+                ),
+                device,
+            ),
+        }
+
+        # forward pass
+        emotion, cause = model(custom_inputs)
+        emotion_label = inputs["emotion"].to(device)
+        cause_label = inputs["cause"].to(device)
+
+        loss_func = torch.nn.CrossEntropyLoss()
+        emotion_loss = loss_func(emotion, emotion_label)
+        cause_loss = loss_func(cause, cause_label)
+        loss = emotion_loss + cause_loss
+        return (
+            (
+                loss,
+                {
+                    "emotion": emotion,
+                    "cause": cause,
+                },
+            )
+            if return_outputs
+            else loss
+        )
+
+    def prediction_step(
+        self,
+        model,
+        inputs,
+        prediction_loss_only,
+        ignore_keys=None,
+    ):
+        model.eval()
+        with torch.no_grad():
+            loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+            label = {
+                "emotion": inputs["emotion"].to(device),
+                "cause": inputs["cause"].to(device),
+            }
+
+        if prediction_loss_only:
+            return (loss, None, None)
+
+        return (loss, outputs, label)
+
+
 def compute_metrics(eval_preds):
     # metric = evaluate.load("glue", "mrpc")
     # print(eval_preds)
@@ -158,6 +253,27 @@ def compute_metrics(eval_preds):
     )
     return {
         "f1_score": f1_score_result,
+    }
+
+
+def compute_metrics_cause(eval_preds):
+    predictions = eval_preds.predictions
+    pred_emotion = predictions["emotion"].argmax(-1)
+    pred_causal = predictions["cause"].argmax(-1)
+    labels = eval_preds.label_ids
+    f1_score_emotion = f1_score(
+        labels["emotion"],
+        pred_emotion,
+        average="macro",
+    )
+    f1_score_causal = f1_score(
+        labels["cause"],
+        pred_causal,
+        average="macro",
+    )
+    return {
+        "f1_score_emotion": f1_score_emotion,
+        "f1_score_causal": f1_score_causal,
     }
 
 
@@ -188,6 +304,93 @@ class VideoTextClassif(torch.nn.Module):
         return result
 
 
+class VideoTextClassif2(torch.nn.Module):
+    def __init__(self, labels=2, clip_type=None):
+        super().__init__()
+        self.model = LanguageBind(
+            clip_type=clip_type,
+            cache_dir="/code/cache_dir",
+        )
+        # чтобы векторы с видео модели, совпали с векторами из языковой
+        self.video_projection = torch.nn.Linear(
+            1024,
+            768,
+            bias=False,
+        )
+        self.multihead_attn = nn.MultiheadAttention(768, 4)
+
+        self.linear = torch.nn.Linear(
+            768,
+            labels,
+        )
+
+    def forward(self, x):
+        result = self.model(x)
+        language_hidden_state = result["language_encoder"]
+        batch_size = language_hidden_state.shape[0]
+        frames = 8
+        video_hidden_state = result["video_encoder"][:, 0, :]
+        video_hidden_state = video_hidden_state.reshape(batch_size, frames, -1)
+        video_hidden_state = self.video_projection(video_hidden_state)
+        total_hidden_state = torch.cat(
+            [video_hidden_state, language_hidden_state],
+            dim=1,
+        )
+        total_hidden_state = language_hidden_state
+        attn_output, attn_output_weights = self.multihead_attn(
+            total_hidden_state,
+            total_hidden_state,
+            total_hidden_state,
+        )
+        feature_vector = attn_output.mean(1)
+        result = self.linear(feature_vector)
+        return result
+
+
+class CauseVideoTextClassif(torch.nn.Module):
+    def __init__(self, labels=2, clip_type=None):
+        super().__init__()
+        self.model = LanguageBind(
+            clip_type=clip_type,
+            cache_dir="/code/cache_dir",
+        )
+        self.emotion_classif = torch.nn.Linear(
+            768 * 4,
+            labels,
+        )
+        self.cause_classif = torch.nn.Linear(
+            768 * 4,
+            2,
+        )
+
+    def forward(self, x):
+        initial_result = self.model(
+            {
+                "video": x["initial_video"],
+                "language": x["initial_language"],
+            }
+        )
+        cause_result = self.model(
+            {
+                "video": x["cause_video"],
+                "language": x["cause_language"],
+            }
+        )
+
+        features = torch.cat(
+            [
+                initial_result["video"],
+                initial_result["language"],
+                cause_result["video"],
+                cause_result["language"],
+            ],
+            dim=-1,
+        )
+        emotion = self.emotion_classif(features)
+        cause = self.cause_classif(features)
+        return emotion, cause
+
+
 class ConversationsDataset(Dataset):
     def __init__(
         self,
@@ -209,6 +412,34 @@ class ConversationsDataset(Dataset):
         # print(video_path)
         turn["label"] = emotions2labels[turn["emotion"]]
 
+
+class CauseConversationsDataset(Dataset):
+    def __init__(
+        self,
+        conversations,
+        base_video_path="/code/SemEval-2024_Task3/training_data/train",
+    ):
+        self.conversations = conversations
+
+        self.base_video_path = base_video_path
+
+    def __len__(self):
+        return len(self.conversations)
+
+    def __getitem__(self, idx):
+        turn = self.conversations[idx]
+
+        turn["initial_video_name"] = turn["initial"]["video_name"]
+        turn["initial_text"] = turn["initial"]["text"]
+
+        turn["cause_video_name"] = turn["causal"]["video_name"]
+        turn["cause_text"] = turn["causal"]["text"]
+
+        turn["video_base_path"] = self.base_video_path
+        # print(video_path)
+        turn["emotion"] = emotions2labels[turn["initial"]["emotion"]]
+        turn["cause"] = turn["label"]
+
         return turn
 
 
@@ -217,6 +448,17 @@ def exp_1_load_model(labels, clip_type):
         labels=labels,
         clip_type=clip_type,
     )
+    return text_video_classif
+
+
+def exp_7_load_model(labels, clip_type):
+    text_video_classif = VideoTextClassif2(
+        labels=labels,
+        clip_type=clip_type,
+    )
+    for param in text_video_classif.named_parameters():
+        if "model" in param[0]:
+            param[1].requires_grad_(False)
     return text_video_classif
 
 
@@ -287,12 +529,89 @@ def exp_5_load_model(labels, clip_type):
     return text_video_classif
 
 
+def exp_9_load_model(labels, clip_type):
+    text_video_classif = CauseVideoTextClassif(
+        labels=labels,
+        clip_type=clip_type,
+    )
+    for param in text_video_classif.named_parameters():
+        if "model" in param[0]:
+            param[1].requires_grad_(False)
+    return text_video_classif
+
+
 def exp_1_get_modality_config(model):
     return model.model.modality_config
 
 
 def exp_4_get_modality_config(model):
     return model.model.model.modality_config
+
+
+def exp_1_load_dataloader(dataset):
+    return ConversationsDataset(conversations=dataset)
+
+
+def exp_9_load_dataloader(dataset):
+    return CauseConversationsDataset(conversations=dataset)
+
+
+def exp_1_load_dataset():
+    return load_dataset("dim/SemEval_training_data_emotions")
+
+
+def exp_9_generate_dataset(dataset):
+    new_dataset = []
+    for i, conversation in enumerate(dataset):
+        cause_pairs = conversation["emotion-cause_pairs"]
+        # print(i, cause_pairs)
+        positive_pairs = []
+        for cause_pair in cause_pairs:
+            positive_example = {"initial": {}, "causal": {}, "label": 1}
+            initial_emotion_pos = int(cause_pair[0].split("_")[0]) - 1
+            initial_emotion = conversation["conversation"][initial_emotion_pos]
+            cause_emotion_pos = int(cause_pair[1]) - 1
+            cause_emotion = conversation["conversation"][cause_emotion_pos]
+            positive_example["initial"] = initial_emotion
+            positive_example["causal"] = cause_emotion
+
+            positive_pairs.append((initial_emotion_pos, cause_emotion_pos))
+            new_dataset.append(positive_example)
+
+        # new_dataset.extend(positive_pairs)
+        positive_pairs = set(positive_pairs)
+        negative_pairs = []
+        for pos_i in range(len(conversation["conversation"])):
+            for pos_j in range(len(conversation["conversation"])):
+                pair = (pos_i, pos_j)
+                if not pair in positive_pairs:
+                    negative_pairs.append(pair)
+        # print(len(negative_pairs), positive_pairs)
+
+        if len(negative_pairs) > len(positive_pairs):
+            negative_pairs = random.sample(negative_pairs, len(positive_pairs))
+
+        for pair in negative_pairs:
+            negative_example = {"initial": {}, "causal": {}, "label": 0}
+            negative_example["initial"] = conversation["conversation"][pair[0]]
+            negative_example["causal"] = conversation["conversation"][pair[1]]
+            new_dataset.append(negative_example)
+
+        # print("==" * 10)
+        # print("==" * 10)
+        # new_dataset.extend(negative_pairs)
+
+    return new_dataset
+
+
+def exp_9_load_dataset():
+    dataset = load_dataset("dim/semeval_subtask2_conversations")
+    train = exp_9_generate_dataset(dataset=dataset["train"])
+    test = exp_9_generate_dataset(dataset=dataset["test"])
+    return {
+        "train": train,
+        "test": test,
+    }
 
 
 if __name__ == "__main__":
@@ -314,12 +633,12 @@ if __name__ == "__main__":
 
     print(labels2emotions)
 
-    dataset = load_dataset("dim/SemEval_training_data_emotions")
+    dataset = exp_9_load_dataset()
     training_data_list, test_data_list = dataset["train"], dataset["test"]
-    # training_data_list = training_data_list[:1000]
-    # test_data_list = test_data_list[:200]
-    training_data = ConversationsDataset(conversations=training_data_list)
-    test_data = ConversationsDataset(conversations=test_data_list)
+    # training_data_list = training_data_list[:2]
+    # test_data_list = test_data_list[:2]
+    training_data = exp_9_load_dataloader(training_data_list)
+    test_data = exp_9_load_dataloader(test_data_list)
 
     device = "cuda:0"
     device = torch.device(device)
@@ -331,11 +650,7 @@ if __name__ == "__main__":
     #     labels=len(all_emotions),
     #     clip_type=clip_type,
     # )
-    # text_video_classif = exp_3_load_model(
-    #     labels=len(all_emotions),
-    #     clip_type=clip_type,
-    # )
-    text_video_classif = exp_5_load_model(
+    text_video_classif = exp_9_load_model(
         labels=len(all_emotions),
         clip_type=clip_type,
     )
@@ -346,10 +661,12 @@ if __name__ == "__main__":
         pretrained_ckpt,
         cache_dir="/code/cache_dir/tokenizer_cache_dir",
     )
-    modality_config = exp_4_get_modality_config(text_video_classif)
+    # modality_config = exp_4_get_modality_config(text_video_classif)
+    modality_config = exp_1_get_modality_config(text_video_classif)
     modality_transform = {
         c: transform_dict[c](modality_config[c]) for c in clip_type.keys()
     }
+    print(text_video_classif)
 
     training_args = TrainingArguments(
         output_dir="semeval/experiments/kosenko/language_bind/train_results/",
@@ -357,21 +674,22 @@ if __name__ == "__main__":
         num_train_epochs=10,
         save_strategy="epoch",
         save_total_limit=1,
-        report_to="none",
-        # report_to="wandb",
+        # report_to="none",
+        report_to="wandb",
         logging_steps=5,
-        per_device_train_batch_size=4,
-        per_device_eval_batch_size=4,
-        gradient_accumulation_steps=16,
+        per_device_train_batch_size=2,
+        per_device_eval_batch_size=2,
+        gradient_accumulation_steps=8,
         bf16=True,
         remove_unused_columns=False,
     )
 
-    trainer = CustomTrainer(
+    # trainer = CustomTrainer(
+    trainer = CustomTrainerCausal(
         model=text_video_classif,
         args=training_args,
         train_dataset=training_data,
         eval_dataset=test_data,
-        compute_metrics=compute_metrics,
+        compute_metrics=compute_metrics_cause,
     )
     trainer.train()
