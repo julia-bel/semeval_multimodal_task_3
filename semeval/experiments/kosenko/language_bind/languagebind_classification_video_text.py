@@ -1,7 +1,7 @@
 import os
 
 os.environ["WANDB_PROJECT"] = "semeval_emotion_classification"
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 import torch
 from transformers.modeling_outputs import TokenClassifierOutput
 
@@ -357,8 +357,8 @@ if __name__ == "__main__":
         num_train_epochs=10,
         save_strategy="epoch",
         save_total_limit=1,
-        # report_to="none",
-        report_to="wandb",
+        report_to="none",
+        # report_to="wandb",
         logging_steps=5,
         per_device_train_batch_size=4,
         per_device_eval_batch_size=4,

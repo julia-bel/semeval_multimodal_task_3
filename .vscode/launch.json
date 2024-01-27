@@ -9,7 +9,8 @@
 			"type": "python",
 			"request": "launch",
 			"module": "semeval.experiments.kosenko.language_bind.languagebind_classification_video_text",
-			"justMyCode": false
+			"justMyCode": false,
+			"sudo": true
 		},
 		{
 			"name": "languagebind_classification_video_audio_text",

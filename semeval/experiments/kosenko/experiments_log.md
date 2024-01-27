@@ -178,14 +178,14 @@ peft_config = LoraConfig(
 - [commit](https://github.com/julia-bel/SemEvalParticipants/blob/e32f2350efbfc8dcb4dd0ed2e4930e374bf1dfec/semeval/experiments/kosenko/language_bind/languagebind_classification_video_text.py)
 - [wandb link](https://wandb.ai/dimweb/semeval_emotion_classification/runs/5a1v9oep?workspace=user-dimweb)
 
-### Experiment 6
+### Experiment 6 (gallant-wind-27)
 Аналогично [experiment 2](#experiment-2-woven-microwave-12). Обучаю только lora со следующим конфигом.
 ```python
 peft_config = LoraConfig(
     inference_mode=False,
     r=16,
     lora_alpha=16,
-    lora_dropout=0.1,
+    lora_dropout=0.0,
     bias="all",
     target_modules=[
         "k_proj",
@@ -198,3 +198,9 @@ peft_config = LoraConfig(
 )
 ```
 - trainable params: 20,725,504 || all params: 852,905,984 || trainable%: 2.429986937458279
+
+Результат:
+- f1_score=0.3375
+- сеть не переобучилась, как в прошлый раз, но и не показала выдающегося результата. Это печально.
+- [commit](https://github.com/julia-bel/SemEvalParticipants/blob/33ba9ea6db522e46edd0f7bdb8aec2d4af455a2f/semeval/experiments/kosenko/language_bind/languagebind_classification_video_audio_text.py)
+- [wandb link](https://wandb.ai/dimweb/semeval_emotion_classification/runs/jqegel3m?workspace=user-dimweb)
