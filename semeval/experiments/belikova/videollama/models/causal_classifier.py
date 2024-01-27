@@ -25,7 +25,7 @@ class CausalClassifier(pl.LightningModule):
         embeddings,
         input_dim=5120,
         attention_dim=128,
-        modality_embedding_dim=512,
+        modality_embedding_dim=256,
         emotion_embedding_dim=7,
         lstm_hidden_dim=128,
     ):
@@ -35,11 +35,16 @@ class CausalClassifier(pl.LightningModule):
 
         self.projections = nn.ModuleList(
             [
-                nn.Sequential(nn.Linear(input_dim, modality_embedding_dim), nn.ReLU())
+                nn.Sequential(
+                    nn.Linear(input_dim, modality_embedding_dim * 2),
+                    nn.ReLU(),
+                    nn.Linear(modality_embedding_dim * 2, modality_embedding_dim),
+                    nn.ReLU(),
+                )
                 for _ in range(len(embeddings))
             ]
         )
-        self.attention_layers = nn.ModuleList(
+        self.attentions = nn.ModuleList(
             [
                 Attention(modality_embedding_dim, attention_dim)
                 for _ in range(len(embeddings))
@@ -47,29 +52,23 @@ class CausalClassifier(pl.LightningModule):
         )
 
         self.emotion_bilstm = nn.LSTM(
-            modality_embedding_dim + emotion_embedding_dim,
+            modality_embedding_dim * len(self.modalities) + emotion_embedding_dim,
             lstm_hidden_dim,
             batch_first=True,
             bidirectional=True,
         )
         self.causal_bilstm = nn.LSTM(
-            modality_embedding_dim,
+            modality_embedding_dim * len(self.modalities),
             lstm_hidden_dim,
             batch_first=True,
             bidirectional=True,
         )
 
-        self.cause_classifier = nn.Sequential(
-            nn.Linear(2 * lstm_hidden_dim + modality_embedding_dim, lstm_hidden_dim),
-            nn.ReLU(),
-            nn.Linear(lstm_hidden_dim, 1),
-        )
-
         self.f1 = torchmetrics.F1Score(
-            task="binary", mdmc_average="global", ignore_index=-1
+            task="binary", multidim_average="global", ignore_index=-1
         )
         self.accuracy = torchmetrics.Accuracy(
-            task="binary", mdmc_average="global", ignore_index=-1
+            task="binary", multidim_average="global", ignore_index=-1
         )
 
     def forward(self, modality_embeddings, utterance_lengths, emotion_embeddings):
@@ -83,10 +82,11 @@ class CausalClassifier(pl.LightningModule):
 
         causal_packed_utterances = rnn_utils.pack_padded_sequence(
             utterance_embeddings,
-            utterance_lengths,
+            utterance_lengths.cpu(),
             batch_first=True,
             enforce_sorted=False,
         )
+
         causal_packed_output, _ = self.causal_bilstm(causal_packed_utterances)
         causal_utterances, _ = rnn_utils.pad_packed_sequence(
             causal_packed_output, batch_first=True
@@ -94,11 +94,11 @@ class CausalClassifier(pl.LightningModule):
 
         emotion_packed_utterances = rnn_utils.pack_padded_sequence(
             torch.cat((utterance_embeddings, emotion_embeddings), dim=2),
-            utterance_lengths,
+            utterance_lengths.cpu(),
             batch_first=True,
             enforce_sorted=False,
         )
-        emotion_packed_output, _ = self.causal_bilstm(emotion_packed_utterances)
+        emotion_packed_output, _ = self.emotion_bilstm(emotion_packed_utterances)
         emotion_utterances, _ = rnn_utils.pad_packed_sequence(
             emotion_packed_output, batch_first=True
         )

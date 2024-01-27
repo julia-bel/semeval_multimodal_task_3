@@ -25,11 +25,11 @@ class EmotionDataset(Dataset):
     def __init__(
         self,
         data_name="dim/SemEval_training_data_emotions",
-        root="/code/data/video_with_audio",
+        root="semeval/data/video_with_audio",
         split="train",
         num_frames=8,
         resize_size=224,
-        tokenizer_name="/code/SemEvalParticipants/semeval/experiments/belikova/videollama/ckpt/llama-2-13b-chat-hf",
+        tokenizer_name="semeval/experiments/belikova/videollama/ckpt/llama-2-13b-chat-hf",
     ):
         self.root = root
         self.annotation = load_dataset(data_name, split=split)
@@ -122,5 +122,8 @@ if __name__ == "__main__":
         collate_fn=train_dataset.collater,
     )
     val_loader = DataLoader(
-        val_dataset, batch_size=32, num_workers=4, collate_fn=val_dataset.collater
+        val_dataset,
+        batch_size=32,
+        num_workers=4,
+        collate_fn=val_dataset.collater,
     )

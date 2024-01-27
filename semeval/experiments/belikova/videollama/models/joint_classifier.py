@@ -29,17 +29,26 @@ class EmotionCausalClassifier(pl.LightningModule):
 
         # Metrics
         self.f1_emotion = torchmetrics.F1Score(
-            task="multiclass", num_classes=num_classes, average="macro"
+            task="multiclass",
+            num_classes=num_classes,
+            average="macro",
+            ignore_index=-1,
         )
         self.accuracy_emotion = torchmetrics.Accuracy(
-            task="multiclass", num_classes=num_classes
+            task="multiclass",
+            num_classes=num_classes,
+            ignore_index=-1,
         )
 
         self.f1_causal = torchmetrics.F1Score(
-            task="binary", mdmc_average="global", ignore_index=-1
+            task="binary",
+            multidim_average="global",
+            ignore_index=-1,
         )
         self.accuracy_causal = torchmetrics.Accuracy(
-            task="binary", mdmc_average="global", ignore_index=-1
+            task="binary",
+            multidim_average="global",
+            ignore_index=-1,
         )
 
     # Inference only
@@ -77,7 +86,7 @@ class EmotionCausalClassifier(pl.LightningModule):
         causal_logits = self.causal_classifier(
             conv_modality_embeddings,
             torch.sum(utterance_lengths, dim=1),
-            emotion_logits,
+            emotion_logits.view(batch_size, num_utterances, -1),
         )
         causal_predictions = (torch.sigmoid(causal_logits) >= 0.5).float()
         return emotion_predictions, causal_predictions
@@ -87,7 +96,7 @@ class EmotionCausalClassifier(pl.LightningModule):
         # utterance_length is a binary mask: (batch_size, max_utterance_num)
         utterance_lengths = batch["utterance_length"]
         causal_labels = batch["causal_relationship"]
-        emotion_labels = batch["emotion"]
+        emotion_labels = batch["emotion"].view(-1)
         batch_size, num_utterances = utterance_lengths.shape
 
         # Emotion classification
@@ -109,10 +118,11 @@ class EmotionCausalClassifier(pl.LightningModule):
         causal_logits = self.causal_classifier(
             conv_modality_embeddings,
             torch.sum(utterance_lengths, dim=1),
-            emotion_logits,
+            emotion_logits.view(batch_size, num_utterances, -1),
         )
+        weight = utterance_lengths[:, :, None] @ utterance_lengths[:, None, :]
         causal_loss = F.binary_cross_entropy_with_logits(
-            causal_logits, causal_labels.float()
+            causal_logits, causal_labels.float(), weight=weight
         )
         causal_predictions = (torch.sigmoid(causal_logits) >= 0.5).float()
 
@@ -144,8 +154,12 @@ class EmotionCausalClassifier(pl.LightningModule):
         # utterance_length is a binary mask: (batch_size, max_utterance_num)
         utterance_lengths = batch["utterance_length"]
         causal_labels = batch["causal_relationship"]
-        emotion_labels = batch["emotion"]
+        emotion_labels = batch["emotion"].view(-1)
+
         batch_size, num_utterances = utterance_lengths.shape
+        emotion_labels = emotion_labels.reshape(
+            batch_size * num_utterances, *emotion_labels.shape[2:]
+        )
 
         # Emotion classification
         utt_modality_embeddings = [
@@ -166,10 +180,11 @@ class EmotionCausalClassifier(pl.LightningModule):
         causal_logits = self.causal_classifier(
             conv_modality_embeddings,
             torch.sum(utterance_lengths, dim=1),
-            emotion_logits,
+            emotion_logits.view(batch_size, num_utterances, -1),
         )
+        weight = utterance_lengths[:, :, None] @ utterance_lengths[:, None, :]
         causal_loss = F.binary_cross_entropy_with_logits(
-            causal_logits, causal_labels.float()
+            causal_logits, causal_labels.float(), weight=weight
         )
         causal_predictions = (torch.sigmoid(causal_logits) >= 0.5).float()
 
@@ -201,7 +216,7 @@ class EmotionCausalClassifier(pl.LightningModule):
         # utterance_length is a binary mask: (batch_size, max_utterance_num)
         utterance_lengths = batch["utterance_length"]
         causal_labels = batch["causal_relationship"]
-        emotion_labels = batch["emotion"]
+        emotion_labels = batch["emotion"].view(-1)
         batch_size, num_utterances = utterance_lengths.shape
 
         # Emotion classification
@@ -212,7 +227,6 @@ class EmotionCausalClassifier(pl.LightningModule):
             for m in self.modalities
         ]
         emotion_logits = self.emotion_classifier(utt_modality_embeddings)
-        emotion_loss = F.cross_entropy(emotion_logits, emotion_labels, ignore_index=-1)
         emotion_predictions = torch.argmax(emotion_logits, dim=1)
 
         # Causal classification
@@ -223,17 +237,11 @@ class EmotionCausalClassifier(pl.LightningModule):
         causal_logits = self.causal_classifier(
             conv_modality_embeddings,
             torch.sum(utterance_lengths, dim=1),
-            emotion_logits,
-        )
-        causal_loss = F.binary_cross_entropy_with_logits(
-            causal_logits, causal_labels.float()
+            emotion_logits.view(batch_size, num_utterances, -1),
         )
         causal_predictions = (torch.sigmoid(causal_logits) >= 0.5).float()
 
-        # Loss and Metrics
-        combined_loss = emotion_loss + causal_loss
-        self.log("test_loss", combined_loss, on_epoch=True)
-
+        # Metrics
         self.log(
             "test_emotion_f1",
             self.f1_emotion(emotion_predictions, emotion_labels),
@@ -251,13 +259,25 @@ class EmotionCausalClassifier(pl.LightningModule):
             "test_causal_accuracy",
             self.accuracy_causal(causal_predictions, causal_labels),
         )
-        return combined_loss
+
+    def on_train_epoch_start(self):
+        self.f1_causal.reset()
+        self.f1_emotion.reset()
+        self.accuracy_causal.reset()
+        self.accuracy_emotion.reset()
+
+    def on_validation_epoch_start(self):
+        self.f1_causal.reset()
+        self.f1_emotion.reset()
+        self.accuracy_causal.reset()
+        self.accuracy_emotion.reset()
+
+    def on_test_epoch_start(self):
+        self.f1_causal.reset()
+        self.f1_emotion.reset()
+        self.accuracy_causal.reset()
+        self.accuracy_emotion.reset()
 
     def configure_optimizers(self):
-        emotion_optimizer = torch.optim.Adam(
-            self.emotion_classifier.parameters(), lr=1e-3
-        )
-        causal_optimizer = torch.optim.Adam(
-            self.causal_classifier.parameters(), lr=1e-3
-        )
-        return emotion_optimizer, causal_optimizer
+        optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+        return optimizer
