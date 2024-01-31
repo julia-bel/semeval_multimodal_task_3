@@ -3,7 +3,7 @@ import os
 
 # os.environ["WANDB_PROJECT"] = "semeval_emotion_classification"
 os.environ["WANDB_PROJECT"] = "semeval_cause_classification"
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 import torch
 from transformers.modeling_outputs import TokenClassifierOutput
 
@@ -49,6 +49,10 @@ from torch.utils.data import Dataset, DataLoader
 import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
+
+
+def cause_collate_fn(item):
+    return item
 
 
 class CustomTrainer(Trainer):
@@ -534,9 +538,34 @@ def exp_9_load_model(labels, clip_type):
         labels=labels,
         clip_type=clip_type,
     )
-    for param in text_video_classif.named_parameters():
-        if "model" in param[0]:
-            param[1].requires_grad_(False)
+
+    return text_video_classif
+
+
+def exp_10_load_model(labels, clip_type):
+    text_video_classif = CauseVideoTextClassif(
+        labels=labels,
+        clip_type=clip_type,
+    )
+
+    peft_config = LoraConfig(
+        inference_mode=False,
+        r=16,
+        lora_alpha=16,
+        lora_dropout=0.1,
+        bias="all",
+        target_modules=[
+            "k_proj",
+            "v_proj",
+            "q_proj",
+            "out_proj",
+            "fc1",
+            "fc2",
+        ],
+    )
+    text_video_classif = get_peft_model(text_video_classif, peft_config)
+    text_video_classif.print_trainable_parameters()
+    text_video_classif.config = None
     return text_video_classif
 
 
@@ -650,7 +679,7 @@ if __name__ == "__main__":
     #     labels=len(all_emotions),
     #     clip_type=clip_type,
     # )
-    text_video_classif = exp_9_load_model(
+    text_video_classif = exp_10_load_model(
         labels=len(all_emotions),
         clip_type=clip_type,
     )
@@ -661,8 +690,8 @@ if __name__ == "__main__":
         pretrained_ckpt,
         cache_dir="/code/cache_dir/tokenizer_cache_dir",
     )
-    # modality_config = exp_4_get_modality_config(text_video_classif)
-    modality_config = exp_1_get_modality_config(text_video_classif)
+    modality_config = exp_4_get_modality_config(text_video_classif)
+    # modality_config = exp_1_get_modality_config(text_video_classif)
     modality_transform = {
         c: transform_dict[c](modality_config[c]) for c in clip_type.keys()
     }
@@ -682,6 +711,7 @@ if __name__ == "__main__":
         gradient_accumulation_steps=8,
         bf16=True,
         remove_unused_columns=False,
+        metric_for_best_model="eval_f1_score_causal",
     )
 
     # trainer = CustomTrainer(

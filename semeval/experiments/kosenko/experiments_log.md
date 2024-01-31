@@ -353,3 +353,7 @@ class CauseVideoTextClassif(torch.nn.Module):
 - emotion_f1=37.81
 - [wandb](https://wandb.ai/dimweb/semeval_cause_classification/runs/trju5u33?workspace=user-dimweb)
 - Сетка переобучилась, нужно попробовать оставить только лору.
+
+### Experiment 10
+ 
+- trainable params: 13,375,241 || all params: 541,529,353 || trainable%: 2.469901386859818

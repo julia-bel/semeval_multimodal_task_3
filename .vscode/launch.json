@@ -19,5 +19,12 @@
 			"module": "semeval.experiments.kosenko.language_bind.languagebind_classification_video_audio_text",
 			"justMyCode": false
 		},
+		{
+			"name": "languagebind_bert_causal",
+			"type": "python",
+			"request": "launch",
+			"module": "semeval.experiments.kosenko.language_bind.languagebind_bert_causal",
+			"justMyCode": false
+		},
 	]
 }
