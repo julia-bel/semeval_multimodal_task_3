@@ -1,7 +1,7 @@
 import os
 
-os.environ["WANDB_PROJECT"] = "semeval_cause_classification"
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+# os.environ["WANDB_PROJECT"] = "semeval_cause_classification"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 from semeval.experiments.kosenko.language_bind.languagebind_classification_video_text import (
     exp_1_get_modality_config,

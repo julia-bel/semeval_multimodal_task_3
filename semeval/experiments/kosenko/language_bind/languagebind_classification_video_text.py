@@ -2,7 +2,7 @@ import os
 
 
 # os.environ["WANDB_PROJECT"] = "semeval_emotion_classification"
-os.environ["WANDB_PROJECT"] = "semeval_cause_classification"
+# os.environ["WANDB_PROJECT"] = "semeval_cause_classification"
 # os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 import torch
 from transformers.modeling_outputs import TokenClassifierOutput
@@ -399,11 +399,13 @@ class ConversationsDataset(Dataset):
     def __init__(
         self,
         conversations,
+        emotions2labels=None,
         base_video_path="/code/SemEval-2024_Task3/training_data/train",
     ):
         self.conversations = conversations
 
         self.base_video_path = base_video_path
+        self.emotions2labels = emotions2labels
 
     def __len__(self):
         return len(self.conversations)
@@ -414,18 +416,21 @@ class ConversationsDataset(Dataset):
         turn["video_name"] = turn["video_name"]
         turn["video_base_path"] = self.base_video_path
         # print(video_path)
-        turn["label"] = emotions2labels[turn["emotion"]]
+        turn["label"] = self.emotions2labels[turn["emotion"]]
+        return turn
 
 
 class CauseConversationsDataset(Dataset):
     def __init__(
         self,
         conversations,
+        emotions2labels=None,
         base_video_path="/code/SemEval-2024_Task3/training_data/train",
     ):
         self.conversations = conversations
 
         self.base_video_path = base_video_path
+        self.emotions2labels = emotions2labels
 
     def __len__(self):
         return len(self.conversations)
@@ -441,7 +446,7 @@ class CauseConversationsDataset(Dataset):
 
         turn["video_base_path"] = self.base_video_path
         # print(video_path)
-        turn["emotion"] = emotions2labels[turn["initial"]["emotion"]]
+        turn["emotion"] = self.emotions2labels[turn["initial"]["emotion"]]
         turn["cause"] = turn["label"]
 
         return turn
@@ -577,12 +582,18 @@ def exp_4_get_modality_config(model):
     return model.model.model.modality_config
 
 
-def exp_1_load_dataloader(dataset):
-    return ConversationsDataset(conversations=dataset)
+def exp_1_load_dataloader(dataset, emotions2labels):
+    return ConversationsDataset(
+        conversations=dataset,
+        emotions2labels=emotions2labels,
+    )
 
 
-def exp_9_load_dataloader(dataset):
-    return CauseConversationsDataset(conversations=dataset)
+def exp_9_load_dataloader(dataset, emotions2labels):
+    return CauseConversationsDataset(
+        conversations=dataset,
+        emotions2labels=emotions2labels,
+    )
 
 
 def exp_1_load_dataset():

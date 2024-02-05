@@ -357,3 +357,10 @@ class CauseVideoTextClassif(torch.nn.Module):
 ### Experiment 10
  
 - trainable params: 13,375,241 || all params: 541,529,353 || trainable%: 2.469901386859818
+
+### Experiment 11
+Попробовал использовать замороженные эмбеддинги и архитектуру берта для предсказания причины. Ничего не вышло.
+- [wandb](https://wandb.ai/dimweb/semeval_cause_classification/runs/jw2u6xox?workspace=user-dimweb)
+
+### Experiment 12
+Классификация эмоций только на основе тектового энкодера. MPNet.

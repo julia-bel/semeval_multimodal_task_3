@@ -26,5 +26,12 @@
 			"module": "semeval.experiments.kosenko.language_bind.languagebind_bert_causal",
 			"justMyCode": false
 		},
+		{
+			"name": "mpnet_emotion_classification",
+			"type": "python",
+			"request": "launch",
+			"module": "semeval.experiments.kosenko.text_encoders.mpnet_emotion_classification",
+			"justMyCode": false
+		},
 	]
 }

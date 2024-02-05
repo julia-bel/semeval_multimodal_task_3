@@ -5,8 +5,8 @@ from semeval.experiments.kosenko.language_bind.languagebind_classification_video
 )
 
 
-os.environ["WANDB_PROJECT"] = "semeval_emotion_classification"
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+# os.environ["WANDB_PROJECT"] = "semeval_emotion_classification"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 import torch
 from transformers.modeling_outputs import TokenClassifierOutput
 
