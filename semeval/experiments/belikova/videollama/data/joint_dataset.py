@@ -8,6 +8,7 @@ from video_llama.models.ImageBind.data import load_and_transform_audio_data
 from video_llama.processors import AlproVideoEvalProcessor, AlproVideoTrainProcessor
 from video_llama.processors.video_processor import load_video
 
+
 all_emotions = [
     "surprise",
     "fear",
@@ -21,7 +22,7 @@ emotions2labels = {em: i for i, em in enumerate(all_emotions)}
 labels2emotions = {i: em for i, em in enumerate(all_emotions)}
 
 
-class EmotionCausalDataset(Dataset):
+class JointDataset(Dataset):
     def __init__(
         self,
         data_name="dim/semeval_subtask2_conversations",
@@ -29,9 +30,9 @@ class EmotionCausalDataset(Dataset):
         split="train",
         num_frames=8,
         resize_size=224,
-        max_text_len=340,
+        max_text_len=350,
         modalities=("video", "text"),
-        tokenizer_name="semeval/experiments/belikova/videollama/ckpt/llama-2-13b-chat-hf",
+        tokenizer_name="semeval/experiments/belikova/videollama/ckpt/llama-2-7b-chat-hf",
     ):
         self.root = root
         self.annotation = load_dataset(data_name, split=split)
@@ -69,10 +70,15 @@ class EmotionCausalDataset(Dataset):
             audio = torch.cat((audio, zero_pad), dim=1)
         return audio
 
+    def __get_subtitle(self, text, speaker):
+        return f"Describe the speaker's emotional state: '{speaker} said {text}' in one word:"
+        # f"You are a helpful language assistant. Describe the speaker's emotional state in one word: '{speaker} said {text}'"
+
     def __get_utterances(
         self,
         conversation,
         device="cpu",
+        max_length=512,
     ):
         result = {m: [] for m in self.modalities}
         result["emotion"] = []
@@ -106,17 +112,24 @@ class EmotionCausalDataset(Dataset):
                     )
                 )
             if "text" in self.modalities:
-                result["text"].append(
-                    self.tokenizer(
-                        sample["text"],
-                        return_tensors="pt",
-                        padding="longest",
-                        max_length=512,
-                        truncation=True,
-                    ).input_ids[0]
+                tokens = self.tokenizer(
+                    self.__get_subtitle(sample["text"], sample["speaker"]),
+                    return_tensors="pt",
+                    padding="max_length",
+                    max_length=max_length,
+                    truncation=True,
                 )
+                result["text"].append(
+                    torch.cat((tokens.input_ids, tokens.attention_mask), dim=0)
+                )
+                if "speaker" not in result:
+                    result["speaker"] = [sample["speaker"]]
+                else:
+                    result["speaker"].append(sample["speaker"])
             result["emotion"].append(emotions2labels[sample["emotion"]])
 
+        speakers = {s: i for i, s in enumerate(set(result["speaker"]))}
+        result["speaker"] = [speakers[s] for s in result["speaker"]]
         return result
 
     def __get_id(self, name):
@@ -126,27 +139,19 @@ class EmotionCausalDataset(Dataset):
         # result = {
         #     "video": ...,
         #     "text": ...,
+        #     "speakers": ...,
         #     "audio": ...,
         #     "causal_pair": ...,
         #     "emotion": ...,
         # }
-
         result = {}
         sample = self.annotation[index]
         cause_pair = sample["emotion-cause_pairs"]
         conversation = sample["conversation"]
         utterances = self.__get_utterances(conversation, device)
         if "text" in self.modalities:
-            padded_text = torch.nn.utils.rnn.pad_sequence(
-                utterances["text"],
-                batch_first=True,
-                padding_value=self.tokenizer.pad_token_id,
-            )
-            result["text"] = torch.nn.functional.pad(
-                padded_text,
-                (0, self.max_text_len - padded_text.shape[1]),
-                value=self.tokenizer.pad_token_id,
-            )
+            result["text"] = torch.stack(utterances["text"])
+            result["speaker"] = torch.tensor(utterances["speaker"])
         if "video" in self.modalities:
             result["video"] = torch.stack(utterances["video"])
         if "audio" in self.modalities:
@@ -162,6 +167,7 @@ class EmotionCausalDataset(Dataset):
         # batch = {
         #     "video": ...,
         #     "text": ...,
+        #     "speakers": ...,
         #     "audio": ...,
         #     "utterance_length": ...,
         #     "causal_relationship": ...,
@@ -203,6 +209,171 @@ class EmotionCausalDataset(Dataset):
                 batch_first=True,
                 padding_value=self.tokenizer.pad_token_id,
             )
+            batch["speaker"] = torch.nn.utils.rnn.pad_sequence(
+                [i["speaker"] for i in instances],
+                batch_first=True,
+                padding_value=-1,
+            )
+        if "video" in self.modalities:
+            batch["video"] = torch.nn.utils.rnn.pad_sequence(
+                [i["video"] for i in instances],
+                batch_first=True,
+                padding_value=0,
+            )
+        if "audio" in self.modalities:
+            batch["audio"] = torch.nn.utils.rnn.pad_sequence(
+                [i["audio"] for i in instances],
+                batch_first=True,
+                padding_value=0,
+            )
+
+        return batch
+
+
+class JointEvalDataset(Dataset):
+    def __init__(
+        self,
+        data_files="semeval/data/test/Subtask_2_test.json",
+        root="semeval/data/video_with_audio",
+        split="train",
+        num_frames=8,
+        resize_size=224,
+        max_text_len=350,
+        modalities=("video", "text"),
+        tokenizer_name="semeval/experiments/belikova/videollama/ckpt/llama-2-7b-chat-hf",
+    ):
+        self.root = root
+        self.annotation = load_dataset("json", data_files=data_files, split=split)
+        self.modalities = modalities
+        self.num_frames = num_frames
+        self.resize_size = resize_size
+        self.max_text_len = max_text_len
+        self.transform = AlproVideoEvalProcessor(
+            image_size=resize_size,
+            n_frms=num_frames,
+        ).transform
+        self.tokenizer = LlamaTokenizer.from_pretrained(tokenizer_name, use_fast=False)
+        self.tokenizer.pad_token = self.tokenizer.unk_token
+
+    def __len__(self):
+        return len(self.annotation)
+
+    def __pad_video(self, video, device="cpu"):
+        if video.shape[1] != self.num_frames:
+            c, f, h, w = video.shape
+            zero_pad = torch.zeros(c, self.num_frames - f, h, w, device=device)
+            video = torch.cat((video, zero_pad), dim=1)
+        return video
+
+    def __pad_audio(self, audio, device="cpu"):
+        if audio.shape[0] != self.num_frames:
+            f, c, h, w = audio.shape
+            zero_pad = torch.zeros(self.num_frames - f, c, h, w, device=device)
+            audio = torch.cat((audio, zero_pad), dim=1)
+        return audio
+
+    def __get_subtitle(self, text, speaker):
+        return f"Describe the speaker's emotional state: '{speaker} said {text}' in one word:"
+        # f"You are a helpful language assistant. Describe the speaker's emotional state in one word: '{speaker} said {text}'"
+
+    def __get_utterances(
+        self,
+        conversation,
+        device="cpu",
+    ):
+        result = {m: [] for m in self.modalities}
+        result["emotion"] = []
+        for sample in conversation:
+            if "video" in self.modalities:
+                video_path = "/".join([self.root, sample["video_name"]])
+                result["video"].append(
+                    self.__pad_video(
+                        self.transform(
+                            load_video(
+                                video_path=video_path,
+                                n_frms=self.num_frames,
+                                height=self.resize_size,
+                                width=self.resize_size,
+                                sampling="uniform",
+                                return_msg=False,
+                            )
+                        ),
+                        device,
+                    )
+                )
+            if "audio" in self.modalities:
+                result["audio"].append(
+                    self.__pad_audio(
+                        load_and_transform_audio_data(
+                            [video_path],
+                            device=device,
+                            clips_per_video=self.num_frames,
+                        )[0],
+                        device,
+                    )
+                )
+            if "text" in self.modalities:
+                tokens = self.tokenizer(
+                    self.__get_subtitle(sample["text"], sample["speaker"]),
+                    return_tensors="pt",
+                    padding="max_length",
+                    max_length=512,
+                    truncation=True,
+                )
+                result["text"].append(
+                    torch.cat((tokens.input_ids, tokens.attention_mask), dim=0)
+                )
+                if "speaker" not in result:
+                    result["speaker"] = [sample["speaker"]]
+                else:
+                    result["speaker"].append(sample["speaker"])
+
+        speakers = {s: i for i, s in enumerate(set(result["speaker"]))}
+        result["speaker"] = [speakers[s] for s in result["speaker"]]
+        return result
+
+    def __getitem__(self, index, device="cpu"):
+        # result = {
+        #     "video": ...,
+        #     "text": ...,
+        #     "speaker": ...,
+        #     "audio": ...,
+        # }
+        result = {}
+
+        sample = self.annotation[index]
+        conversation = sample["conversation"]
+        utterances = self.__get_utterances(conversation, device)
+        if "text" in self.modalities:
+            result["text"] = torch.stack(utterances["text"])
+            result["speaker"] = torch.tensor(utterances["speaker"])
+        if "video" in self.modalities:
+            result["video"] = torch.stack(utterances["video"])
+        if "audio" in self.modalities:
+            result["audio"] = torch.stack(utterances["audio"])
+
+        return result
+
+    def collater(self, instances):
+        # batch = {
+        #     "video": ...,
+        #     "text": ...,
+        #     "speaker": ...,
+        #     "audio": ...,
+        # }
+        batch = {}
+
+        if "text" in self.modalities:
+            batch["text"] = torch.nn.utils.rnn.pad_sequence(
+                [i["text"] for i in instances],
+                batch_first=True,
+                padding_value=self.tokenizer.pad_token_id,
+            )
+            batch["speaker"] = torch.nn.utils.rnn.pad_sequence(
+                [i["speaker"] for i in instances],
+                batch_first=True,
+                padding_value=-1,
+            )
         if "video" in self.modalities:
             batch["video"] = torch.nn.utils.rnn.pad_sequence(
                 [i["video"] for i in instances],
@@ -220,8 +391,8 @@ class EmotionCausalDataset(Dataset):
 
 
 if __name__ == "__main__":
-    train_dataset = EmotionCausalDataset(split="train")
-    val_dataset = EmotionCausalDataset(split="test")
+    train_dataset = JointDataset(split="train")
+    val_dataset = JointDataset(split="test")
     train_loader = DataLoader(
         train_dataset,
         batch_size=3,
