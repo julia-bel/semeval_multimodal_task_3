@@ -1,9 +1,9 @@
 {
   "model": {
     "model_cls": "VideoChat2_it",
-    "vit_blip_model_path": "/code/semeval/experiments/kosenko/Ask-Anything/video_chat2/umt_l16_qformer.pth",
-    "llama_model_path": "/code/semeval/experiments/kosenko/Ask-Anything/video_chat2/vicuna-7b-v0",
-    "videochat2_model_path": "/code/semeval/experiments/kosenko/Ask-Anything/video_chat2/videochat2_7b_stage3.pth",
+    "vit_blip_model_path": "/code/semeval/experiments/kosenko/ask_anything/video_chat2/umt_l16_qformer.pth",
+    "llama_model_path": "/code/semeval/experiments/kosenko/ask_anything/video_chat2/vicuna-7b-v0",
+    "videochat2_model_path": "/code/semeval/experiments/kosenko/ask_anything/video_chat2/videochat2_7b_stage3.pth",
     "freeze_vit": false,
     "freeze_qformer": false,
     "max_txt_len": 512,

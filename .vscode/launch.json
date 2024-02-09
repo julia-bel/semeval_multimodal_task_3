@@ -33,5 +33,12 @@
 			"module": "semeval.experiments.kosenko.text_encoders.mpnet_emotion_classification",
 			"justMyCode": false
 		},
+		{
+			"name": "videochat debug",
+			"type": "python",
+			"request": "launch",
+			"module": "semeval.experiments.kosenko.ask_anything.video_chat2.demo",
+			"justMyCode": false
+		},
 	]
 }

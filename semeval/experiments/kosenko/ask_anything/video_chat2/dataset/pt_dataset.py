@@ -7,10 +7,19 @@ from os.path import basename
 
 import numpy as np
 
-from dataset.base_dataset import ImageVideoBaseDataset
-from dataset.utils import load_anno, pre_text
-from dataset.video_utils import VIDEO_READER_FUNCS
-from utils.distributed import is_main_process
+from ..dataset.base_dataset import (
+    ImageVideoBaseDataset,
+)
+from ..dataset.utils import (
+    load_anno,
+    pre_text,
+)
+from ..dataset.video_utils import (
+    VIDEO_READER_FUNCS,
+)
+from ..utils.distributed import (
+    is_main_process,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +44,13 @@ class PTImgTrainDataset(ImageVideoBaseDataset):
         super().__init__()
 
         if len(ann_file) == 3 and ann_file[2] == "video":
-            self.media_type = "video"  
+            self.media_type = "video"
         else:
             self.media_type = "image"
         self.label_file, self.data_root = ann_file[:2]
 
-        logger.info('Load json file')
-        with open(self.label_file, 'r') as f:
+        logger.info("Load json file")
+        with open(self.label_file, "r") as f:
             self.anno = json.load(f)
         self.num_examples = len(self.anno)
 
@@ -81,7 +90,7 @@ class PTVidTrainDataset(PTImgTrainDataset):
         video_reader_type="decord",
         sample_type="rand",
         num_tries=3,
-        pre_text=True
+        pre_text=True,
     ):
         super().__init__(ann_file, transform, pre_text=pre_text)
         self.num_frames = num_frames
@@ -98,7 +107,9 @@ class PTImgEvalDataset(ImageVideoBaseDataset):
         super(PTImgEvalDataset, self).__init__()
         self.raw_anno_list = load_anno(ann_file)
         self.transform = transform
-        self.has_multi_vision_gt = has_multi_vision_gt  # each caption has multiple image as ground_truth
+        self.has_multi_vision_gt = (
+            has_multi_vision_gt  # each caption has multiple image as ground_truth
+        )
 
         self.text = None
         self.image = None
@@ -123,8 +134,13 @@ class PTImgEvalDataset(ImageVideoBaseDataset):
         for txt_id, ann in enumerate(self.raw_anno_list):
             self.text.append(pre_text(ann["caption"]))
             self.txt2img[txt_id] = []
-            _images = ann["image"] \
-                if isinstance(ann["image"], list) else [ann["image"], ]
+            _images = (
+                ann["image"]
+                if isinstance(ann["image"], list)
+                else [
+                    ann["image"],
+                ]
+            )
             for i, image in enumerate(_images):
                 self.image.append(image)
                 self.txt2img[txt_id].append(img_id)
@@ -137,8 +153,13 @@ class PTImgEvalDataset(ImageVideoBaseDataset):
         for img_id, ann in enumerate(self.raw_anno_list):
             self.image.append(ann["image"])
             self.img2txt[img_id] = []
-            _captions = ann["caption"] \
-                if isinstance(ann["caption"], list) else [ann["caption"], ]
+            _captions = (
+                ann["caption"]
+                if isinstance(ann["caption"], list)
+                else [
+                    ann["caption"],
+                ]
+            )
             for i, caption in enumerate(_captions):
                 self.text.append(pre_text(caption))
                 self.img2txt[img_id].append(txt_id)
@@ -166,9 +187,15 @@ class PTVidEvalDataset(PTImgEvalDataset):
     media_type = "video"
 
     def __init__(
-            self, ann_file, transform, num_frames=4,
-            video_reader_type="decord", sample_type="rand", num_tries=1,
-            is_paragraph_retrieval=False, has_multi_vision_gt=False,
+        self,
+        ann_file,
+        transform,
+        num_frames=4,
+        video_reader_type="decord",
+        sample_type="rand",
+        num_tries=1,
+        is_paragraph_retrieval=False,
+        has_multi_vision_gt=False,
     ):
         super(PTVidEvalDataset, self).__init__(ann_file, transform, has_multi_vision_gt)
         self.num_frames = num_frames

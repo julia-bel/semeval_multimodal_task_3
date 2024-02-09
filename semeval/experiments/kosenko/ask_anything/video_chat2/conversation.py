@@ -8,7 +8,7 @@ from enum import auto, Enum
 import numpy as np
 from decord import VideoReader, cpu
 import torchvision.transforms as T
-from dataset.video_transforms import (
+from .dataset.video_transforms import (
     GroupNormalize,
     GroupScale,
     GroupCenterCrop,
@@ -123,7 +123,12 @@ class Chat:
 
         duration = len(vr) // vr.get_avg_fps()
         index = np.linspace(0, len(vr) - 1, num=int(duration))
-        buffer = vr.get_batch(index).asnumpy()
+        try:
+            buffer = vr.get_batch(index).asnumpy()
+        except:
+            # i don't know why
+            buffer = vr.get_batch(index).numpy()
+            
         # transform
         input_mean = [0.48145466, 0.4578275, 0.40821073]
         input_std = [0.26862954, 0.26130258, 0.27577711]
@@ -144,7 +149,10 @@ class Chat:
             images_group.append(img)
         images_group = list()
         for frame_index in frame_indices:
-            img = Image.fromarray(vr[frame_index].asnumpy())
+            try:
+                img = Image.fromarray(vr[frame_index].asnumpy())
+            except:
+                img = Image.fromarray(vr[frame_index].numpy())
             images_group.append(img)
         torch_imgs_224 = transform(images_group)
         if return_msg:

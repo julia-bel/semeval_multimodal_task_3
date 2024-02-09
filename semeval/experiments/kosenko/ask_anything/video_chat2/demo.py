@@ -2,12 +2,12 @@ import torch
 import gradio as gr
 from gradio.themes.utils import colors, fonts, sizes
 
-from conversation import Chat
+from .conversation import Chat
 
 # videochat
-from utils.config import Config
-from utils.easydict import EasyDict
-from models.videochat2_it import VideoChat2_it
+from .utils.config import Config
+from .utils.easydict import EasyDict
+from .models.videochat2_it import VideoChat2_it
 from peft import get_peft_model, LoraConfig, TaskType
 
 
@@ -16,7 +16,9 @@ from peft import get_peft_model, LoraConfig, TaskType
 # ========================================
 def init_model():
     print("Initializing VideoChat")
-    config_file = "configs/config.json"
+    config_file = (
+        "/code/semeval/experiments/kosenko/ask_anything/video_chat2/configs/config.json"
+    )
     cfg = Config.from_file(config_file)
     cfg.model.vision_encoder.num_frames = 4
     # cfg.model.videochat2_model_path = ""
@@ -33,7 +35,7 @@ def init_model():
     )
     model.llama_model = get_peft_model(model.llama_model, peft_config)
     # state_dict = torch.load("your_model_path/videochat2_7b_stage3.pth", "cpu")
-    videochat2_model_path = "/code/semeval/experiments/kosenko/Ask-Anything/video_chat2/videochat2_7b_stage3.pth"
+    videochat2_model_path = "/code/semeval/experiments/kosenko/ask_anything/video_chat2/videochat2_7b_stage3.pth"
     state_dict = torch.load(videochat2_model_path, "cpu")
     if "model" in state_dict.keys():
         msg = model.load_state_dict(state_dict["model"], strict=False)

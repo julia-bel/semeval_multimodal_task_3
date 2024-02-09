@@ -3,9 +3,9 @@ import os
 import sys
 from os.path import dirname, join
 
-from utils.config import Config
-from utils.distributed import init_distributed_mode, is_main_process
-from utils.logger import setup_logger
+from ..utils.config import Config
+from ..utils.distributed import init_distributed_mode, is_main_process
+from ..utils.logger import setup_logger
 
 logger = logging.getLogger(__name__)
 

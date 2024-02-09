@@ -3,9 +3,16 @@ from torch.utils.data import ConcatDataset, DataLoader
 from torchvision import transforms
 from torchvision.transforms import InterpolationMode
 
-from dataset.dataloader import MetaLoader
-from dataset.pt_dataset import PTImgTrainDataset, PTVidTrainDataset, PTImgEvalDataset, PTVidEvalDataset
-from dataset.it_dataset import ITImgTrainDataset, ITVidTrainDataset
+from semeval.experiments.kosenko.ask_anything.video_chat2.dataset.dataloader import (
+    MetaLoader,
+)
+from semeval.experiments.kosenko.ask_anything.video_chat2.dataset.pt_dataset import (
+    PTImgTrainDataset,
+    PTVidTrainDataset,
+    PTImgEvalDataset,
+    PTVidEvalDataset,
+)
+from ..dataset.it_dataset import ITImgTrainDataset, ITVidTrainDataset
 
 
 def get_media_type(dataset_config):
@@ -18,7 +25,7 @@ def get_media_type(dataset_config):
 
 
 def create_dataset(dataset_type, config):
-    if "clip" in config.model.get("vit_model", 'vit'):
+    if "clip" in config.model.get("vit_model", "vit"):
         mean = (0.485, 0.456, 0.406)
         std = (0.229, 0.224, 0.225)
     else:
@@ -87,7 +94,9 @@ def create_dataset(dataset_type, config):
     if dataset_type == "pt_train":
         # convert to list of lists
         train_files = (
-            [config.train_file] if isinstance(config.train_file[0], str) else config.train_file
+            [config.train_file]
+            if isinstance(config.train_file[0], str)
+            else config.train_file
         )
         train_media_types = sorted(list({get_media_type(e) for e in train_files}))
 
@@ -102,9 +111,7 @@ def create_dataset(dataset_type, config):
                 dataset_kwargs = dict(
                     ann_file=train_file,
                     transform=train_transform,
-                    pre_text=config.get(
-                        "pre_text", True
-                    ),
+                    pre_text=config.get("pre_text", True),
                 )
                 if m == "video":
                     dataset_kwargs.update(video_only_dataset_kwargs_train)
@@ -112,11 +119,13 @@ def create_dataset(dataset_type, config):
             dataset = ConcatDataset(datasets)
             train_datasets.append(dataset)
             return train_datasets
-    
+
     elif dataset_type in ["it_train"]:
         # convert to list of lists
         train_files = (
-            [config.train_file] if isinstance(config.train_file[0], str) else config.train_file
+            [config.train_file]
+            if isinstance(config.train_file[0], str)
+            else config.train_file
         )
         train_media_types = sorted(list({get_media_type(e) for e in train_files}))
 
@@ -132,30 +141,32 @@ def create_dataset(dataset_type, config):
                     ann_file=train_file,
                     transform=train_transform,
                     system=config.model.get("system", ""),
-                    start_token=config.model.get("img_start_token", "<Image>"), 
+                    start_token=config.model.get("img_start_token", "<Image>"),
                     end_token=config.model.get("img_end_token", "</Image>"),
                 )
                 if m == "video":
-                    video_only_dataset_kwargs_train.update({
-                        "start_token": config.model.get("start_token", "<Video>"),
-                        "end_token": config.model.get("end_token", "</Video>"),
-                    })
+                    video_only_dataset_kwargs_train.update(
+                        {
+                            "start_token": config.model.get("start_token", "<Video>"),
+                            "end_token": config.model.get("end_token", "</Video>"),
+                        }
+                    )
                     dataset_kwargs.update(video_only_dataset_kwargs_train)
                     if "tgif" in train_file[1]:
-                        video_only_dataset_kwargs_train.update({
-                            "video_reader_type": "gif"
-                        })
+                        video_only_dataset_kwargs_train.update(
+                            {"video_reader_type": "gif"}
+                        )
                         dataset_kwargs.update(video_only_dataset_kwargs_train)
                     else:
-                        video_only_dataset_kwargs_train.update({
-                            "video_reader_type": "decord"
-                        })
+                        video_only_dataset_kwargs_train.update(
+                            {"video_reader_type": "decord"}
+                        )
                         dataset_kwargs.update(video_only_dataset_kwargs_train)
                 datasets.append(dataset_cls(**dataset_kwargs))
             dataset = ConcatDataset(datasets)
             train_datasets.append(dataset)
         return train_datasets
-    
+
     elif dataset_type == "pt_eval":
         test_datasets = []
         test_dataset_names = []
@@ -177,7 +188,6 @@ def create_dataset(dataset_type, config):
                 dataset_kwargs.update(video_only_dataset_kwargs_eval)
             test_datasets.append(test_dataset_cls(**dataset_kwargs))
         return test_datasets, test_dataset_names
-
 
 
 def create_sampler(datasets, shuffles, num_tasks, global_rank):

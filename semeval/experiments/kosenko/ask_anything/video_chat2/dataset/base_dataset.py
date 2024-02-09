@@ -3,10 +3,13 @@ import os
 import random
 from torch.utils.data import Dataset
 
-from dataset.utils import load_image_from_path
+from ..dataset.utils import (
+    load_image_from_path,
+)
 
 try:
     from petrel_client.client import Client
+
     has_client = True
 except ImportError:
     has_client = False
@@ -31,7 +34,7 @@ class ImageVideoBaseDataset(Dataset):
 
         self.client = None
         if has_client:
-            self.client = Client('~/petreloss.conf')
+            self.client = Client("~/petreloss.conf")
 
     def __getitem__(self, index):
         raise NotImplementedError
@@ -66,13 +69,21 @@ class ImageVideoBaseDataset(Dataset):
         image = self.transform(image)
         return image, index
 
-    def load_and_transform_media_data_video(self, index, data_path, return_fps=False, clip=None):
+    def load_and_transform_media_data_video(
+        self, index, data_path, return_fps=False, clip=None
+    ):
         for _ in range(self.num_tries):
             try:
-                max_num_frames = self.max_num_frames if hasattr(self, "max_num_frames") else -1
+                max_num_frames = (
+                    self.max_num_frames if hasattr(self, "max_num_frames") else -1
+                )
                 frames, frame_indices, fps = self.video_reader(
-                    data_path, self.num_frames, self.sample_type, 
-                    max_num_frames=max_num_frames, client=self.client, clip=clip
+                    data_path,
+                    self.num_frames,
+                    self.sample_type,
+                    max_num_frames=max_num_frames,
+                    client=self.client,
+                    clip=clip,
                 )
             except Exception as e:
                 logger.warning(
