@@ -252,7 +252,7 @@ class Chat:
         )
         self.model.vision_encoder.encoder.pos_embed = new_pos_emb
         image_emb, _ = self.model.encode_img(
-            video, "Watch the video and answer the question."
+            video, "Watch the video and answer the question.",
         )
         img_list.append(image_emb)
         conv.messages.append([conv.roles[0], f"<Video><VideoHere></Video>\n"])
