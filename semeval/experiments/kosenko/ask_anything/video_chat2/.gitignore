@@ -48,3 +48,4 @@ wandb/
 logs/
 *.pth
 vicuna-7b-v0
+temp.mp4

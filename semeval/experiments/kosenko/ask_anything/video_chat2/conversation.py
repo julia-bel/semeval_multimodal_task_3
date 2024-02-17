@@ -16,6 +16,8 @@ from .dataset.video_transforms import (
     ToTorchFormatTensor,
 )
 from torchvision.transforms.functional import InterpolationMode
+from torchvision.io import read_video, write_video
+import os
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -84,7 +86,7 @@ class Chat:
             max_new_tokens=max_new_tokens,
             stopping_criteria=self.stopping_criteria,
             num_beams=num_beams,
-            do_sample=True,
+            do_sample=False,
             min_length=min_length,
             top_p=top_p,
             repetition_penalty=repetition_penalty,
@@ -128,7 +130,7 @@ class Chat:
         except:
             # i don't know why
             buffer = vr.get_batch(index).numpy()
-            
+
         # transform
         input_mean = [0.48145466, 0.4578275, 0.40821073]
         input_std = [0.26862954, 0.26130258, 0.27577711]
@@ -237,11 +239,26 @@ class Chat:
             sinusoid_table = sinusoid_table.flatten(1, 3)  # B, THW, C
         return sinusoid_table
 
-    def upload_video(self, image, conv, img_list, num_segments):
+    def upload_video(
+        self,
+        image,
+        conv,
+        img_list,
+        num_segments,
+        video_prompt="Watch the video and answer the question.",
+    ):
         if isinstance(image, str):  # is a image path
             vid, msg = self.load_video(
                 image, num_segments=num_segments, return_msg=True
             )
+            TC, H, W = vid.shape
+            video = vid.reshape(1, TC // 3, 3, H, W).to(self.device)
+        elif isinstance(image, list):
+            image = self.concat_videos(image)
+            vid, msg = self.load_video(
+                image, num_segments=num_segments, return_msg=True
+            )
+            os.remove(image)
             TC, H, W = vid.shape
             video = vid.reshape(1, TC // 3, 3, H, W).to(self.device)
         else:
@@ -252,13 +269,33 @@ class Chat:
         )
         self.model.vision_encoder.encoder.pos_embed = new_pos_emb
         image_emb, _ = self.model.encode_img(
-            video, "Watch the video and answer the question.",
+            video,
+            video_prompt,
         )
         img_list.append(image_emb)
         conv.messages.append([conv.roles[0], f"<Video><VideoHere></Video>\n"])
         msg = "Received."
         # self.conv.append_message(self.conv.roles[1], msg)
         return msg, img_list, conv
+
+    def concat_videos(self, video_paths):
+        all_videos = []
+        avg_fps_total = []
+        for video_path in video_paths:
+            vr = VideoReader(video_path, ctx=cpu(0))
+            all_video = vr.get_batch(list(range(len(vr)))).numpy()
+            all_videos.append(all_video)
+            avg_fps_total.append(vr.get_avg_fps())
+
+        all_videos = np.concatenate(all_videos)
+        avg_fps_total = np.mean(avg_fps_total)
+        temp_video = "./temp.mp4"
+        write_video(
+            temp_video,
+            torch.tensor(all_videos),
+            fps=avg_fps_total,
+        )
+        return temp_video
 
     def upload_img(self, image, conv, img_list):
         img = image  # Image.open(image)#.convert('RGB')
